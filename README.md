@@ -7,6 +7,9 @@ Caveats for now: very little error checking, DNSSEC only ZSK tests, uses 8.8.8.8
 
 # Installing
 
+## Binaries
+Binaries can be found [here] (https://github.com/42wim/dt/releases/)
+
 ## Building
 Go 1.6.3+ is required. Make sure you have [Go](https://golang.org/doc/install) properly installed, including setting up your [GOPATH] (https://golang.org/doc/code.html#GOPATH)
 
