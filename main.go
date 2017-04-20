@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"net"
+	"sync"
+	"text/tabwriter"
 	"time"
 
 	"os"
@@ -10,11 +12,12 @@ import (
 	"github.com/42wim/ipisp"
 	"github.com/dustin/go-humanize"
 	"github.com/miekg/dns"
-	"text/tabwriter"
 )
 
 var (
 	resolver = "8.8.8.8:53"
+	wc       chan string
+	done     chan struct{}
 )
 
 type NSInfo struct {
@@ -182,6 +185,16 @@ func prepMsg() *dns.Msg {
 	return m
 }
 
+func outputter() {
+	const padding = 1
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, padding, ' ', tabwriter.Debug)
+	for input := range wc {
+		fmt.Fprintf(w, input)
+	}
+	w.Flush()
+	done <- struct{}{}
+}
+
 func main() {
 	if len(os.Args) == 1 {
 		fmt.Println("please enter a domain. (e.g. google.com)")
@@ -193,40 +206,53 @@ func main() {
 		fmt.Println("no nameservers found for", domain)
 		return
 	}
-	const padding = 1
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, padding, ' ', tabwriter.Debug)
-	fmt.Fprintf(w, "NS\tIP\tLOC\tASN\tISP\trtt\tSerial\tDNSSEC\tValidFrom\tValidUntil\n")
+	wc = make(chan string)
+	done = make(chan struct{})
+	var wg sync.WaitGroup
+	go outputter()
+
+	wc <- fmt.Sprintf("NS\tIP\tLOC\tASN\tISP\trtt\tSerial\tDNSSEC\tValidFrom\tValidUntil\n")
 	for _, nsinfo := range nsinfos {
-		fmt.Fprintf(w, "%s\t", nsinfo.Name)
-		i := 0
-		for _, ip := range nsinfo.IP {
-			info, _ := ipinfo(ip)
-			if i > 0 {
-				fmt.Fprintf(w, "\t%s\t", ip.String())
-			} else {
-				fmt.Fprintf(w, "%s\t", ip.String())
-			}
-			fmt.Fprintf(w, "%v\tASN %#v\t%v\t", info.Loc, info.ASN, fmt.Sprintf("%.40s", info.ISP))
-			rtt, soa, err := typeSOA(domain, ip.String())
-			if err != nil {
-				fmt.Fprintf(w, "%s\t%v\t", "error", "error")
-			} else {
-				fmt.Fprintf(w, "%s\t%v\t", rtt.String(), int64(soa.Serial))
-			}
-			valid, keyinfo, err := typeDNSKEY(domain, ip.String())
-			if valid {
-				fmt.Fprintf(w, "%v\t%s\t%s", "valid", humanize.Time(time.Unix(keyinfo.Start, 0)), humanize.Time(time.Unix(keyinfo.End, 0)))
-			} else {
-				if err != nil {
-					fmt.Fprintf(w, "%v\t%s\t%s", "error", "", "")
+		wg.Add(1)
+		go func(nsinfo NSInfo) {
+			output := fmt.Sprintf("%s\t", nsinfo.Name)
+			i := 0
+			for _, ip := range nsinfo.IP {
+				info, _ := ipinfo(ip)
+				if i > 0 {
+					output = output + fmt.Sprintf("\t%s\t", ip.String())
 				} else {
-					fmt.Fprintf(w, "%v\t%s\t%s", "invalid", "", "")
+					output = output + fmt.Sprintf("%s\t", ip.String())
 				}
+				output = output + fmt.Sprintf("%v\tASN %#v\t%v\t", info.Loc, info.ASN, fmt.Sprintf("%.40s", info.ISP))
+				rtt, soa, err := typeSOA(domain, ip.String())
+				if err != nil {
+					output = output + fmt.Sprintf("%s\t%v\t", "error", "error")
+				} else {
+					output = output + fmt.Sprintf("%s\t%v\t", rtt.String(), int64(soa.Serial))
+				}
+				valid, keyinfo, err := typeDNSKEY(domain, ip.String())
+				if valid {
+					output = output + fmt.Sprintf("%v\t%s\t%s", "valid", humanize.Time(time.Unix(keyinfo.Start, 0)), humanize.Time(time.Unix(keyinfo.End, 0)))
+				} else {
+					if err != nil {
+						output = output + fmt.Sprintf("%v\t%s\t%s", "error", "", "")
+					} else {
+						if keyinfo.Start == 0 {
+							output = output + fmt.Sprintf("%v\t%s\t%s", "disabled", "", "")
+						} else {
+							output = output + fmt.Sprintf("%v\t%s\t%s", "invalid", "", "")
+						}
+					}
+				}
+				output = output + fmt.Sprintln()
+				i++
 			}
-			fmt.Fprintln(w)
-			i++
-		}
+			wc <- output
+			wg.Done()
+		}(nsinfo)
 	}
-	w.Flush()
-	fmt.Println()
+	wg.Wait()
+	close(wc)
+	<-done
 }
