@@ -28,6 +28,11 @@ type IPInfo struct {
 	ISP string
 }
 
+type KeyInfo struct {
+	Start int64
+	End   int64
+}
+
 func ipinfo(ip net.IP) (IPInfo, error) {
 	client, _ := ipisp.NewDNSClient()
 	resp, err := client.LookupIP(net.ParseIP(ip.String()))
@@ -37,15 +42,15 @@ func ipinfo(ip net.IP) (IPInfo, error) {
 	return IPInfo{resp.Country, resp.ASN, resp.Name.Raw}, nil
 }
 
-func typeSOA(q string, server string) (time.Duration, *dns.SOA) {
+func typeSOA(q string, server string) (time.Duration, *dns.SOA, error) {
 	c := new(dns.Client)
 	m := prepMsg()
 	m.Question[0] = dns.Question{q + ".", dns.TypeSOA, dns.ClassINET}
 	in, rtt, err := c.Exchange(m, net.JoinHostPort(server, "53"))
 	if err != nil {
-		return 0, new(dns.SOA)
+		return 0, new(dns.SOA), err
 	}
-	return rtt, in.Answer[0].(*dns.SOA)
+	return rtt, in.Answer[0].(*dns.SOA), nil
 }
 
 func getIP(host string, qtype uint16) []net.IP {
@@ -76,12 +81,15 @@ func typeAAAA(host string) []net.IP {
 	return getIP(host, dns.TypeAAAA)
 }
 
-func typeDNSKEY(q string, server string) (bool, int64, int64) {
+func typeDNSKEY(q string, server string) (bool, KeyInfo, error) {
 	c := new(dns.Client)
 	m := prepMsg()
 	m.SetEdns0(4096, true)
 	m.Question[0] = dns.Question{q + ".", dns.TypeDNSKEY, dns.ClassINET}
-	in, _, _ := c.Exchange(m, net.JoinHostPort(server, "53"))
+	in, _, err := c.Exchange(m, net.JoinHostPort(server, "53"))
+	if err != nil {
+		return false, KeyInfo{}, err
+	}
 	keys := []*dns.DNSKEY{}
 	for _, a := range in.Answer {
 		switch a.(type) {
@@ -94,13 +102,16 @@ func typeDNSKEY(q string, server string) (bool, int64, int64) {
 	m = prepMsg()
 	m.SetEdns0(4096, true)
 	m.Question[0] = dns.Question{q + ".", dns.TypeNS, dns.ClassINET}
-	in, _, _ = c.Exchange(m, net.JoinHostPort(server, "53"))
+	in, _, err = c.Exchange(m, net.JoinHostPort(server, "53"))
+	if err != nil {
+		return false, KeyInfo{}, err
+	}
 	return validateRR(keys, in.Answer)
 }
 
-func validateRR(keys []*dns.DNSKEY, rrset []dns.RR) (bool, int64, int64) {
+func validateRR(keys []*dns.DNSKEY, rrset []dns.RR) (bool, KeyInfo, error) {
 	if len(rrset) == 0 {
-		return false, 0, 0
+		return false, KeyInfo{}, nil
 	}
 	var sig *dns.RRSIG
 	var cleanset []dns.RR
@@ -119,13 +130,13 @@ func validateRR(keys []*dns.DNSKEY, rrset []dns.RR) (bool, int64, int64) {
 			if err == nil {
 				ti, te := explicitValid(sig)
 				if sig.ValidityPeriod(time.Now()) {
-					return true, ti, te
+					return true, KeyInfo{ti, te}, nil
 				}
-				return false, ti, te
+				return false, KeyInfo{ti, te}, nil
 			}
 		}
 	}
-	return false, 0, 0
+	return false, KeyInfo{}, nil
 }
 
 func explicitValid(rr *dns.RRSIG) (int64, int64) {
@@ -196,13 +207,21 @@ func main() {
 				fmt.Fprintf(w, "%s\t", ip.String())
 			}
 			fmt.Fprintf(w, "%v\tASN %#v\t%v\t", info.Loc, info.ASN, fmt.Sprintf("%.40s", info.ISP))
-			rtt, soa := typeSOA(domain, ip.String())
-			valid, ti, te := typeDNSKEY(domain, ip.String())
-			fmt.Fprintf(w, "%s\t%v\t", rtt.String(), int64(soa.Serial))
-			if valid {
-				fmt.Fprintf(w, "%v\t%s\t%s", valid, humanize.Time(time.Unix(ti, 0)), humanize.Time(time.Unix(te, 0)))
+			rtt, soa, err := typeSOA(domain, ip.String())
+			if err != nil {
+				fmt.Fprintf(w, "%s\t%v\t", "error", "error")
 			} else {
-				fmt.Fprintf(w, "%v\t%s\t%s", valid, "", "")
+				fmt.Fprintf(w, "%s\t%v\t", rtt.String(), int64(soa.Serial))
+			}
+			valid, keyinfo, err := typeDNSKEY(domain, ip.String())
+			if valid {
+				fmt.Fprintf(w, "%v\t%s\t%s", "valid", humanize.Time(time.Unix(keyinfo.Start, 0)), humanize.Time(time.Unix(keyinfo.End, 0)))
+			} else {
+				if err != nil {
+					fmt.Fprintf(w, "%v\t%s\t%s", "error", "", "")
+				} else {
+					fmt.Fprintf(w, "%v\t%s\t%s", "invalid", "", "")
+				}
 			}
 			fmt.Fprintln(w)
 			i++
