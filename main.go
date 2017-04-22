@@ -158,13 +158,16 @@ func explicitValid(rr *dns.RRSIG) (int64, int64) {
 	return ti, te
 }
 
-func findNS(domain string) []NSInfo {
+func findNS(domain string) ([]NSInfo, error) {
 	c := new(dns.Client)
 	m := prepMsg()
 	m.Question[0] = dns.Question{domain, dns.TypeNS, dns.ClassINET}
-	in, _, _ := c.Exchange(m, resolver)
 	var ips []net.IP
 	var nsinfos []NSInfo
+	in, _, err := c.Exchange(m, resolver)
+	if err != nil {
+		return nsinfos, err
+	}
 	for _, a := range in.Answer {
 		nsinfo := NSInfo{}
 		nsinfo.Name = a.(*dns.NS).Ns
@@ -174,7 +177,7 @@ func findNS(domain string) []NSInfo {
 		nsinfos = append(nsinfos, nsinfo)
 		ips = []net.IP{}
 	}
-	return nsinfos
+	return nsinfos, nil
 }
 
 func prepMsg() *dns.Msg {
@@ -201,9 +204,13 @@ func main() {
 		return
 	}
 	domain := os.Args[1]
-	nsinfos := findNS(dns.Fqdn(domain))
+	nsinfos, err := findNS(dns.Fqdn(domain))
 	if len(nsinfos) == 0 {
 		fmt.Println("no nameservers found for", domain)
+		return
+	}
+	if err != nil {
+		fmt.Println(err)
 		return
 	}
 	wc = make(chan string)
