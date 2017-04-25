@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"net"
 	"sync"
@@ -10,14 +11,17 @@ import (
 	"os"
 
 	"github.com/42wim/ipisp"
+	"github.com/briandowns/spinner"
 	"github.com/dustin/go-humanize"
 	"github.com/miekg/dns"
 )
 
 var (
-	resolver = "8.8.8.8"
-	wc       chan string
-	done     chan struct{}
+	resolver            = "8.8.8.8"
+	wc                  chan string
+	done                chan struct{}
+	flagScan, flagDebug *bool
+	flagQPS             *int
 )
 
 type NSInfo struct {
@@ -45,9 +49,9 @@ func ipinfo(ip net.IP) (IPInfo, error) {
 	return IPInfo{resp.Country, resp.ASN, resp.Name.Raw}, nil
 }
 
-func getIP(host string, qtype uint16) []net.IP {
+func getIP(host string, qtype uint16, server string) []net.IP {
 	var ips []net.IP
-	rrset, _, err := queryRRset(host, qtype, resolver, false)
+	rrset, _, err := queryRRset(host, qtype, server, false)
 	if err != nil {
 		return ips
 	}
@@ -158,8 +162,8 @@ func findNS(domain string) ([]NSInfo, error) {
 		nsinfo := NSInfo{}
 		ips := []net.IP{}
 		nsinfo.Name = ns
-		ips = append(ips, getIP(ns, dns.TypeA)...)
-		ips = append(ips, getIP(ns, dns.TypeAAAA)...)
+		ips = append(ips, getIP(ns, dns.TypeA, resolver)...)
+		ips = append(ips, getIP(ns, dns.TypeAAAA, resolver)...)
 		nsinfo.IP = ips
 		nsinfos = append(nsinfos, nsinfo)
 	}
@@ -185,11 +189,25 @@ func outputter() {
 }
 
 func main() {
-	if len(os.Args) == 1 {
-		fmt.Println("please enter a domain. (e.g. google.com)")
+	//flagDebug = flag.Bool("debug", false, "enable debug")
+	flagScan = flag.Bool("scan", false, "scan domain for common records")
+	flagQPS = flag.Int("qps", 10, "Queries per seconds (per nameserver)")
+	flag.Parse()
+
+	if len(flag.Args()) == 0 {
+		fmt.Println("Usage:")
+		fmt.Println("\tdt [-scan] domain")
+		fmt.Println()
+		fmt.Println("Example:")
+		fmt.Println("\tdt google.com")
+		fmt.Println()
+		fmt.Println("Flags:")
+		flag.PrintDefaults()
 		return
 	}
-	domain := os.Args[1]
+	domain := flag.Arg(0)
+	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+	s.Start()
 	nsinfos, err := findNS(dns.Fqdn(domain))
 	if len(nsinfos) == 0 {
 		fmt.Println("no nameservers found for", domain)
@@ -253,5 +271,10 @@ func main() {
 	}
 	wg.Wait()
 	close(wc)
+	s.Stop()
 	<-done
+
+	if *flagScan {
+		domainscan(domain)
+	}
 }
