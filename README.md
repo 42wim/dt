@@ -18,7 +18,7 @@ cd $GOPATH
 go get github.com/42wim/dt
 ```
 
-You should now have matterbridge binary in the bin directory:
+You should now have dt binary in the bin directory:
 
 ```
 $ ls bin/
