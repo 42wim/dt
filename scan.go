@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
 	"fmt"
 	"net"
 	"sort"
@@ -30,6 +32,28 @@ type ScanResponse struct {
 	Rtt time.Duration
 }
 
+func zoneTransfer(domain, server string) []string {
+	var records []string
+	t := new(dns.Transfer)
+	req := prepMsg()
+	req.Question[0] = dns.Question{dns.Fqdn(domain), dns.TypeAXFR, dns.ClassINET}
+	q, err := t.In(req, net.JoinHostPort(server, "53"))
+	if err != nil {
+		return records
+		//	fmt.Println("error", err)
+	}
+	for res := range q {
+		if res.Error != nil {
+			break
+		}
+		for _, rr := range res.RR {
+			records = append(records, rr.String())
+		}
+	}
+	sort.Strings(records)
+	return records
+}
+
 func domainscan(domain string) {
 	var ips []net.IP
 	respc := make(chan ScanResponse, 100)
@@ -46,12 +70,33 @@ func domainscan(domain string) {
 	}
 
 	*flagQPS = *flagQPS * len(servers)
+
+	for _, ip := range ips {
+		res := zoneTransfer(domain, ip.String())
+		if len(res) > 0 {
+			zt := ""
+			for _, rr := range res {
+				zt = zt + fmt.Sprintln(rr)
+			}
+			fmt.Println(zt)
+			// only print one. Further scanning not needed
+			return
+			// TODO compare hashes
+			//	fmt.Printf("%x\n", Hash("key", []byte(zt)))
+		} else {
+			fmt.Printf("%s ", ip.String())
+		}
+	}
+	fmt.Println(": AXFR denied")
+
 	s.Suffix = " Scanning... will take approx " + fmt.Sprintf("%#v seconds", scanEntries/(*flagQPS))
 	s.Start()
+
 	res, _, _ := queryRRset(dns.Fqdn("*."+domain), dns.TypeA, ips[0].String(), true)
 	// TODO handle * record correctly
 	if len(res) != 0 {
 		s.Stop()
+		fmt.Println()
 		for _, rr := range res {
 			fmt.Println(rr.String())
 		}
@@ -116,4 +161,10 @@ func domainscan(domain string) {
 	for _, response := range responses {
 		fmt.Println(response)
 	}
+}
+
+func Hash(tag string, data []byte) []byte {
+	h := hmac.New(sha256.New, []byte(tag))
+	h.Write(data)
+	return h.Sum(nil)
 }
