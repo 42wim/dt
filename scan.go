@@ -32,6 +32,12 @@ type ScanResponse struct {
 	Rtt time.Duration
 }
 
+type ScanRequest struct {
+	Qtype  uint16
+	Query  string
+	Domain string
+}
+
 func zoneTransfer(domain, server string) []string {
 	var records []string
 	t := new(dns.Transfer)
@@ -89,7 +95,7 @@ func domainscan(domain string) {
 	}
 	fmt.Println(": AXFR denied")
 
-	s.Suffix = " Scanning... will take approx " + fmt.Sprintf("%#v seconds", scanEntries/(*flagQPS))
+	s.Suffix = " Scanning... will take approx " + fmt.Sprintf("%#v seconds", scanEntries/(len(servers)*(*flagQPS)))
 	s.Start()
 
 	res, _, _ := queryRRset(dns.Fqdn("*."+domain), dns.TypeA, ips[0].String(), true)
@@ -103,17 +109,19 @@ func domainscan(domain string) {
 		return
 	}
 
-	go func() {
-		i := -1
-		limiter := time.Tick(time.Millisecond * time.Duration(1000/(*flagQPS)))
-		for _, src := range DSP {
-			qtype := src.Qtype
-			for _, entry := range src.Entries {
-				i++
-				<-limiter
+	var nsc []chan ScanRequest
+	for _, server := range servers {
+		c := make(chan ScanRequest, 100)
+		nsc = append(nsc, c)
+		//fmt.Printf("scanning %s\n", server.IP[0])
+		go func(c chan ScanRequest, ns net.IP) {
+			limiter := time.Tick(time.Millisecond * time.Duration(1000/(*flagQPS)))
+			for request := range c {
 				var rrs []dns.RR
-				// roundrobin
-				ns := ips[i%len(ips)]
+				<-limiter
+				qtype := request.Qtype
+				entry := request.Query
+				domain := request.Domain
 				if qtype == dns.TypeA {
 					res, _, err := query(dns.Fqdn(entry+domain), dns.TypeA, ns.String(), true)
 					if err != nil {
@@ -138,11 +146,20 @@ func domainscan(domain string) {
 				}
 				respc <- ScanResponse{RR: res, NS: ns.String(), Rtt: rtt}
 			}
+		}(c, server.IP[0])
+	}
+
+	i := -1
+	for _, src := range DSP {
+		for _, entry := range src.Entries {
+			i++
+			q := ScanRequest{src.Qtype, entry, domain}
+			nsc[i%len(servers)] <- q
 		}
-	}()
+	}
 
 	var responses []string
-	i := 0
+	i = 0
 	for resp := range respc {
 		if len(resp.RR) > 0 {
 			for _, rr := range resp.RR {
