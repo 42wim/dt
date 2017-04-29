@@ -182,7 +182,9 @@ func main() {
 	}
 
 	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
-	s.Start()
+	if !*flagDebug {
+		s.Start()
+	}
 
 	// check dnssec
 	chainValid, chainErr := validateChain(dns.Fqdn(domain))
@@ -217,13 +219,16 @@ func main() {
 				} else {
 					output = output + fmt.Sprintf("%s\t%v\t", rtt.String(), int64(soa[0].(*dns.SOA).Serial))
 				}
-				keys, _, err := queryRRset(domain, dns.TypeDNSKEY, ip.String(), true)
+				var keys []dns.RR
+				var keyinfo KeyInfo
+				var valid bool
+				keys, _, err = queryRRset(domain, dns.TypeDNSKEY, ip.String(), true)
 				if err != nil {
 				}
 				res, _, err := query(domain, dns.TypeNS, ip.String(), true)
-				if err != nil {
+				if err == nil {
+					valid, keyinfo, err = validateRRSIG(keys, res.Answer)
 				}
-				valid, keyinfo, err := validateRRSIG(keys, res.Answer)
 				if valid && chainValid {
 					output = output + fmt.Sprintf("%v\t%s\t%s", "valid", humanize.Time(time.Unix(keyinfo.Start, 0)), humanize.Time(time.Unix(keyinfo.End, 0)))
 				} else {
