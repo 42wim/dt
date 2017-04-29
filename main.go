@@ -11,6 +11,7 @@ import (
 	"os"
 
 	"github.com/42wim/ipisp"
+	"github.com/Sirupsen/logrus"
 	"github.com/briandowns/spinner"
 	"github.com/dustin/go-humanize"
 	"github.com/miekg/dns"
@@ -22,6 +23,7 @@ var (
 	done                chan struct{}
 	flagScan, flagDebug *bool
 	flagQPS             *int
+	log                 = logrus.New()
 )
 
 type NSInfo struct {
@@ -104,53 +106,6 @@ func queryRRset(q string, qtype uint16, server string, sec bool) ([]dns.RR, time
 	return rrset, rtt, nil
 }
 
-func validateRR(keys []dns.RR, rrset []dns.RR) (bool, KeyInfo, error) {
-	if len(rrset) == 0 {
-		return false, KeyInfo{}, nil
-	}
-	var sig *dns.RRSIG
-	var cleanset []dns.RR
-	for _, v := range rrset {
-		_, ok := v.(*dns.RRSIG)
-		if ok {
-			sig = v.(*dns.RRSIG)
-		} else {
-			cleanset = append(cleanset, v)
-		}
-	}
-	for _, k := range keys {
-		key := k.(*dns.DNSKEY)
-		// zone signing key
-		if key.Flags == 256 {
-			err := sig.Verify(key, cleanset)
-			if err == nil {
-				ti, te := explicitValid(sig)
-				if sig.ValidityPeriod(time.Now()) {
-					return true, KeyInfo{ti, te}, nil
-				}
-				return false, KeyInfo{ti, te}, nil
-			}
-		}
-	}
-	return false, KeyInfo{}, nil
-}
-
-func explicitValid(rr *dns.RRSIG) (int64, int64) {
-	t := time.Now()
-	var utc int64
-	var year68 = int64(1 << 31)
-	if t.IsZero() {
-		utc = time.Now().UTC().Unix()
-	} else {
-		utc = t.UTC().Unix()
-	}
-	modi := (int64(rr.Inception) - utc) / year68
-	mode := (int64(rr.Expiration) - utc) / year68
-	ti := int64(rr.Inception) + (modi * year68)
-	te := int64(rr.Expiration) + (mode * year68)
-	return ti, te
-}
-
 func findNS(domain string) ([]NSInfo, error) {
 	rrset, _, err := queryRRset(domain, dns.TypeNS, resolver, false)
 	if err != nil {
@@ -166,6 +121,9 @@ func findNS(domain string) ([]NSInfo, error) {
 		ips = append(ips, getIP(ns, dns.TypeAAAA, resolver)...)
 		nsinfo.IP = ips
 		nsinfos = append(nsinfos, nsinfo)
+	}
+	if len(nsinfos) == 0 {
+		return nsinfos, fmt.Errorf("no NS found")
 	}
 	return nsinfos, nil
 }
@@ -189,25 +147,30 @@ func outputter() {
 }
 
 func main() {
-	//flagDebug = flag.Bool("debug", false, "enable debug")
+	flagDebug = flag.Bool("debug", false, "enable debug")
 	flagScan = flag.Bool("scan", false, "scan domain for common records")
 	flagQPS = flag.Int("qps", 10, "Queries per seconds (per nameserver)")
 	flag.Parse()
 
 	if len(flag.Args()) == 0 {
 		fmt.Println("Usage:")
-		fmt.Println("\tdt [-scan] domain")
+		fmt.Println("\tdt [FLAGS] domain")
 		fmt.Println()
 		fmt.Println("Example:")
-		fmt.Println("\tdt google.com")
+		fmt.Println("\tdt icann.org")
+		fmt.Println("\tdt -debug ripe.net")
+		fmt.Println("\tdt -debug -scan yourdomain.com")
 		fmt.Println()
 		fmt.Println("Flags:")
 		flag.PrintDefaults()
 		return
 	}
+
+	if *flagDebug {
+		log.Level = logrus.DebugLevel
+	}
+
 	domain := flag.Arg(0)
-	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
-	s.Start()
 	nsinfos, err := findNS(dns.Fqdn(domain))
 	if len(nsinfos) == 0 {
 		fmt.Println("no nameservers found for", domain)
@@ -217,12 +180,24 @@ func main() {
 		fmt.Println(err)
 		return
 	}
+
+	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+	s.Start()
+
+	// check dnssec
+	chainValid, chainErr := validateChain(dns.Fqdn(domain))
+
 	wc = make(chan string)
 	done = make(chan struct{})
 	var wg sync.WaitGroup
 	go outputter()
 
 	wc <- fmt.Sprintf("NS\tIP\tLOC\tASN\tISP\trtt\tSerial\tDNSSEC\tValidFrom\tValidUntil\n")
+
+	// for now disable debuglevel (because of multiple goroutines output)
+	if *flagDebug {
+		log.Level = logrus.InfoLevel
+	}
 	for _, nsinfo := range nsinfos {
 		wg.Add(1)
 		go func(nsinfo NSInfo) {
@@ -248,17 +223,17 @@ func main() {
 				res, _, err := query(domain, dns.TypeNS, ip.String(), true)
 				if err != nil {
 				}
-				valid, keyinfo, err := validateRR(keys, res.Answer)
-				if valid {
+				valid, keyinfo, err := validateRRSIG(keys, res.Answer)
+				if valid && chainValid {
 					output = output + fmt.Sprintf("%v\t%s\t%s", "valid", humanize.Time(time.Unix(keyinfo.Start, 0)), humanize.Time(time.Unix(keyinfo.End, 0)))
 				} else {
 					if err != nil {
 						output = output + fmt.Sprintf("%v\t%s\t%s", "error", "", "")
 					} else {
-						if keyinfo.Start == 0 {
+						if keyinfo.Start == 0 && len(keys) == 0 {
 							output = output + fmt.Sprintf("%v\t%s\t%s", "disabled", "", "")
 						} else {
-							output = output + fmt.Sprintf("%v\t%s\t%s", "invalid", "", "")
+							output = output + fmt.Sprintf("%v\t%s\t%s", "invalid", humanize.Time(time.Unix(keyinfo.Start, 0)), humanize.Time(time.Unix(keyinfo.End, 0)))
 						}
 					}
 				}
@@ -274,7 +249,24 @@ func main() {
 	s.Stop()
 	<-done
 
+	if chainErr != nil {
+		fmt.Printf("DNSSEC: %s\n", chainErr)
+	}
+
+	// enable debug again if needed
+	if *flagDebug {
+		log.Level = logrus.DebugLevel
+	}
+
 	if *flagScan {
 		domainscan(domain)
 	}
+}
+
+func getParentDomain(domain string) string {
+	i, end := dns.NextLabel(domain, 0)
+	if !end {
+		return domain[i:]
+	}
+	return "."
 }
