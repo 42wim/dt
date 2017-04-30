@@ -95,12 +95,12 @@ func validateDomain(domain string) (bool, error) {
 	if err != nil {
 	}
 	log.Debugf("Asking NS (%s) DNSKEY of %s", nsdata[0].Info[0].IP.String(), domain)
-	res, _, err := query(domain, dns.TypeDNSKEY, nsdata[0].Info[0].IP.String(), true)
+	res, err := query(domain, dns.TypeDNSKEY, nsdata[0].Info[0].IP.String(), true)
 	if err != nil {
 		return false, err
 	}
 	// map DNSKEYs
-	for _, a := range res.Answer {
+	for _, a := range res.Msg.Answer {
 		switch a.(type) {
 		case *dns.DNSKEY:
 			key := a.(*dns.DNSKEY)
@@ -111,7 +111,7 @@ func validateDomain(domain string) (bool, error) {
 		return false, fmt.Errorf("Validation failed. No DNSKEY found for %s on %s", domain, nsdata[0].Info[0].IP.String())
 	}
 
-	valid, info, err := validateDNSKEY(res.Answer)
+	valid, info, err := validateDNSKEY(res.Msg.Answer)
 	if valid {
 		log.Debugf("RRSIG validated (%s -> %s)", time.Unix(info.Start, 0), time.Unix(info.End, 0))
 	} else {
@@ -127,13 +127,13 @@ func validateDomain(domain string) (bool, error) {
 
 	// asking parent about DS
 	log.Debugf("Asking parent %s (%s) DS of %s", nsdata[0].Info[0].IP.String(), getParentDomain(domain), domain)
-	res, _, err = query(domain, dns.TypeDS, nsdata[0].Info[0].IP.String(), true)
-	if err == nil && len(res.Answer) == 0 {
+	res, err = query(domain, dns.TypeDS, nsdata[0].Info[0].IP.String(), true)
+	if err == nil && len(res.Msg.Answer) == 0 {
 		return false, fmt.Errorf("Validation failed. No DS records found for %s on %v\n", domain, nsdata[0].Info[0].IP.String())
 	}
 
 	// look for all parent DS and compare digests
-	for _, a := range res.Answer {
+	for _, a := range res.Msg.Answer {
 		switch a.(type) {
 		case *dns.DS:
 			parentDS := a.(*dns.DS)

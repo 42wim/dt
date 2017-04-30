@@ -32,6 +32,7 @@ type NSInfo struct {
 	Serial int64
 	IPInfo
 	DNSSECInfo
+	Msg *dns.Msg
 }
 
 type NSData struct {
@@ -65,9 +66,9 @@ type DomainStat struct {
 }
 
 type Response struct {
-	RR  []dns.RR
-	IP  net.IP
-	Rtt time.Duration
+	Msg    *dns.Msg
+	Server string
+	Rtt    time.Duration
 }
 
 func ipinfo(ip net.IP) (IPInfo, error) {
@@ -106,7 +107,7 @@ func extractRR(rrset []dns.RR, qtype uint16) []dns.RR {
 	return out
 }
 
-func query(q string, qtype uint16, server string, sec bool) (*dns.Msg, time.Duration, error) {
+func query(q string, qtype uint16, server string, sec bool) (Response, error) {
 	c := new(dns.Client)
 	m := prepMsg()
 	m.CheckingDisabled = true
@@ -114,27 +115,28 @@ func query(q string, qtype uint16, server string, sec bool) (*dns.Msg, time.Dura
 		m.CheckingDisabled = false
 		m.SetEdns0(4096, true)
 	}
+	var resp Response
 	m.Question[0] = dns.Question{dns.Fqdn(q), qtype, dns.ClassINET}
 	in, rtt, err := c.Exchange(m, net.JoinHostPort(server, "53"))
 	if err != nil {
-		return nil, 0, err
+		return resp, err
 	}
 	if in.Rcode != 0 {
-		return in, rtt, fmt.Errorf("failure: %s", dns.RcodeToString[in.Rcode])
+		return resp, fmt.Errorf("failure: %s", dns.RcodeToString[in.Rcode])
 	}
-	return in, rtt, nil
+	return Response{Msg: in, Server: server, Rtt: rtt}, nil
 }
 
 func queryRRset(q string, qtype uint16, server string, sec bool) ([]dns.RR, time.Duration, error) {
-	res, rtt, err := query(q, qtype, server, sec)
+	res, err := query(q, qtype, server, sec)
 	if err != nil {
 		return []dns.RR{}, 0, err
 	}
-	rrset := extractRR(res.Answer, qtype)
+	rrset := extractRR(res.Msg.Answer, qtype)
 	if len(rrset) == 0 {
 		return []dns.RR{}, 0, fmt.Errorf("no rr for %#v", qtype)
 	}
-	return rrset, rtt, nil
+	return rrset, res.Rtt, nil
 }
 
 func findNS(domain string) ([]NSData, error) {
@@ -187,15 +189,21 @@ func outputter() {
 			if ns.Rtt == 0 {
 				failed = true
 			}
+			// TODO output somewhere else
+			// LAME servers
+			auth := ""
+			if ns.Msg != nil && !ns.Msg.Authoritative {
+				auth = " L"
+			}
 			if failed {
-				fmt.Fprintf(w, "%s\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t", ns.Name, ns.IPInfo.IP.String(), ns.Loc, ns.ASN, ns.ISP, "error", "error", "error")
+				fmt.Fprintf(w, "%s\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t", ns.Name, ns.IPInfo.IP.String()+auth, ns.Loc, ns.ASN, ns.ISP, "error", "error", "error")
 				fmt.Fprintln(w)
 				break
 			}
 			if i == 0 {
-				fmt.Fprintf(w, "%s\t%v\t%v\t%v\t%v\t%v\t%v\t", ns.Name, ns.IPInfo.IP.String(), ns.Loc, ns.ASN, fmt.Sprintf("%.40s", ns.ISP), ns.Rtt, ns.Serial)
+				fmt.Fprintf(w, "%s\t%v\t%v\t%v\t%v\t%v\t%v\t", ns.Name, ns.IPInfo.IP.String()+auth, ns.Loc, ns.ASN, fmt.Sprintf("%.40s", ns.ISP), ns.Rtt, ns.Serial)
 			} else {
-				fmt.Fprintf(w, "\t%v\t%v\t%v\t%v\t%v\t%v\t", ns.IPInfo.IP.String(), ns.Loc, ns.ASN, fmt.Sprintf("%.40s", ns.ISP), ns.Rtt, ns.Serial)
+				fmt.Fprintf(w, "\t%v\t%v\t%v\t%v\t%v\t%v\t", ns.IPInfo.IP.String()+auth, ns.Loc, ns.ASN, fmt.Sprintf("%.40s", ns.ISP), ns.Rtt, ns.Serial)
 			}
 			if ns.Valid && ns.ChainValid {
 				fmt.Fprintf(w, "%v\t%s\t%s", "valid", humanize.Time(time.Unix(ns.KeyInfo.Start, 0)), humanize.Time(time.Unix(ns.KeyInfo.End, 0)))
@@ -288,14 +296,15 @@ func main() {
 				}
 
 				keys, _, _ := queryRRset(domain, dns.TypeDNSKEY, ip.String(), true)
-				res, _, err := query(domain, dns.TypeNS, ip.String(), true)
+				res, err := query(domain, dns.TypeNS, ip.String(), true)
 				if err == nil {
-					valid, keyinfo, _ := validateRRSIG(keys, res.Answer)
+					valid, keyinfo, _ := validateRRSIG(keys, res.Msg.Answer)
 					newnsinfo.DNSSECInfo = DNSSECInfo{Valid: valid, KeyInfo: keyinfo, ChainValid: chainValid}
 					if keyinfo.Start == 0 && len(keys) == 0 {
 						newnsinfo.Disabled = true
 					}
 				}
+				newnsinfo.Msg = res.Msg
 				wc <- newnsinfo
 			}
 			wg.Done()
@@ -316,6 +325,7 @@ func main() {
 		log.Level = logrus.DebugLevel
 	}
 
+	// GLUE
 	g := &Glue{NS: nsdatas}
 	glue, missed, err := g.CheckParent(domain)
 	if !glue {

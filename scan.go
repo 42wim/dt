@@ -126,12 +126,12 @@ func domainscan(domain string) {
 				entry := request.Query
 				domain := request.Domain
 				if qtype == dns.TypeA {
-					res, _, err := query(dns.Fqdn(entry+domain), dns.TypeA, ns.String(), true)
+					res, err := query(dns.Fqdn(entry+domain), dns.TypeA, ns.String(), true)
 					if err != nil {
 						//fmt.Println(err)
 					} else {
-						a := extractRR(res.Answer, dns.TypeA)
-						cname := extractRR(res.Answer, dns.TypeCNAME)
+						a := extractRR(res.Msg.Answer, dns.TypeA)
+						cname := extractRR(res.Msg.Answer, dns.TypeCNAME)
 						rrs = append(rrs, a...)
 						rrs = append(rrs, cname...)
 					}

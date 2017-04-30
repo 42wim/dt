@@ -63,12 +63,12 @@ func getParentGlue(domain string) ([]net.IP, error) {
 	}
 	// asking parent about NS
 	log.Debugf("Asking parent %s (%s) NS of %s", nsdata[0].Info[0].IP.String(), getParentDomain(domain), domain)
-	res, _, err := query(domain, dns.TypeNS, nsdata[0].Info[0].IP.String(), true)
+	res, err := query(domain, dns.TypeNS, nsdata[0].Info[0].IP.String(), true)
 	if err != nil {
 		return ips, err
 	}
-	rrset := extractRR(res.Extra, dns.TypeA)
-	rrset = append(rrset, extractRR(res.Extra, dns.TypeAAAA)...)
+	rrset := extractRR(res.Msg.Extra, dns.TypeA)
+	rrset = append(rrset, extractRR(res.Msg.Extra, dns.TypeAAAA)...)
 	for _, rr := range rrset {
 		switch rr.(type) {
 		case *dns.A:
@@ -84,12 +84,12 @@ func (g *Glue) getSelfGlue(domain string) ([]net.IP, error) {
 	// TODO all NS
 	var ips []net.IP
 	log.Debugf("Asking self %s (%s) NS of %s", g.NS[0].IP[0].String(), domain, domain)
-	res, _, err := query(domain, dns.TypeNS, g.NS[0].IP[0].String(), true)
+	res, err := query(domain, dns.TypeNS, g.NS[0].IP[0].String(), true)
 	if err != nil {
 		return ips, err
 	}
-	rrset := extractRR(res.Extra, dns.TypeA)
-	rrset = append(rrset, extractRR(res.Extra, dns.TypeAAAA)...)
+	rrset := extractRR(res.Msg.Extra, dns.TypeA)
+	rrset = append(rrset, extractRR(res.Msg.Extra, dns.TypeAAAA)...)
 	for _, rr := range rrset {
 		switch rr.(type) {
 		case *dns.A:
