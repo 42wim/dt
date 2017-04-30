@@ -7,7 +7,15 @@ DNS tool that displays information about your domain.
 * validate DNSSEC chain (use -debug to see more info)
 * change query speed for scanning (default 10 queries per second)
 
-NOTE: uses 8.8.8.8 for initial domain lookup.
+NOTE: uses 8.8.8.8 for initial domain lookup.  
+Feedback, issues and PR's are welcome.
+
+# TODO
+* daemon mode
+* JSON API
+* grading
+* keeping history
+
 
 # Installing
 
