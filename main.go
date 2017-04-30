@@ -19,7 +19,7 @@ import (
 
 var (
 	resolver            = "8.8.8.8"
-	wc                  chan string
+	wc                  chan NSInfo
 	done                chan struct{}
 	flagScan, flagDebug *bool
 	flagQPS             *int
@@ -27,19 +27,40 @@ var (
 )
 
 type NSInfo struct {
+	Name   string
+	Rtt    time.Duration
+	Serial int64
+	IPInfo
+	DNSSECInfo
+}
+
+type NSData struct {
 	Name string
-	IP   []net.IP
+	Info []NSInfo
 }
 
 type IPInfo struct {
+	IP  net.IP
 	Loc string
 	ASN ipisp.ASN
 	ISP string
 }
 
+type DNSSECInfo struct {
+	Valid      bool
+	ChainValid bool
+	Disabled   bool
+	KeyInfo
+}
+
 type KeyInfo struct {
 	Start int64
 	End   int64
+}
+
+type DomainStat struct {
+	Domain string
+	NS     []NSInfo
 }
 
 func ipinfo(ip net.IP) (IPInfo, error) {
@@ -48,7 +69,7 @@ func ipinfo(ip net.IP) (IPInfo, error) {
 	if err != nil {
 		return IPInfo{}, err
 	}
-	return IPInfo{resp.Country, resp.ASN, resp.Name.Raw}, nil
+	return IPInfo{ip, resp.Country, resp.ASN, resp.Name.Raw}, nil
 }
 
 func getIP(host string, qtype uint16, server string) []net.IP {
@@ -106,26 +127,30 @@ func queryRRset(q string, qtype uint16, server string, sec bool) ([]dns.RR, time
 	return rrset, rtt, nil
 }
 
-func findNS(domain string) ([]NSInfo, error) {
+func findNS(domain string) ([]NSData, error) {
 	rrset, _, err := queryRRset(domain, dns.TypeNS, resolver, false)
 	if err != nil {
-		return []NSInfo{}, nil
+		return []NSData{}, nil
 	}
-	var nsinfos []NSInfo
+	var nsdatas []NSData
 	for _, rr := range rrset {
+		var ips []net.IP
+		nsdata := NSData{}
 		ns := rr.(*dns.NS).Ns
-		nsinfo := NSInfo{}
-		ips := []net.IP{}
-		nsinfo.Name = ns
+		nsdata.Name = ns
 		ips = append(ips, getIP(ns, dns.TypeA, resolver)...)
 		ips = append(ips, getIP(ns, dns.TypeAAAA, resolver)...)
-		nsinfo.IP = ips
-		nsinfos = append(nsinfos, nsinfo)
+		var nsinfos []NSInfo
+		for _, ip := range ips {
+			nsinfos = append(nsinfos, NSInfo{IPInfo: IPInfo{IP: ip}, Name: ns})
+		}
+		nsdata.Info = nsinfos
+		nsdatas = append(nsdatas, nsdata)
 	}
-	if len(nsinfos) == 0 {
-		return nsinfos, fmt.Errorf("no NS found")
+	if len(nsdatas) == 0 {
+		return nsdatas, fmt.Errorf("no NS found")
 	}
-	return nsinfos, nil
+	return nsdatas, nil
 }
 
 func prepMsg() *dns.Msg {
@@ -139,11 +164,47 @@ func prepMsg() *dns.Msg {
 func outputter() {
 	const padding = 1
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, padding, ' ', tabwriter.Debug)
+	fmt.Fprintf(w, "NS\tIP\tLOC\tASN\tISP\trtt\tSerial\tDNSSEC\tValidFrom\tValidUntil\n")
+	m := make(map[string][]NSInfo)
 	for input := range wc {
-		fmt.Fprintf(w, input)
+		m[input.Name] = append(m[input.Name], input)
+	}
+	for _, info := range m {
+		i := 0
+		var failed bool
+		for _, ns := range info {
+			if ns.Rtt == 0 {
+				failed = true
+			}
+			if failed {
+				fmt.Fprintf(w, "%s\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t", ns.Name, ns.IPInfo.IP.String(), ns.Loc, ns.ASN, ns.ISP, "error", "error", "error")
+				fmt.Fprintln(w)
+				break
+			}
+			if i == 0 {
+				fmt.Fprintf(w, "%s\t%v\t%v\t%v\t%v\t%v\t%v\t", ns.Name, ns.IPInfo.IP.String(), ns.Loc, ns.ASN, fmt.Sprintf("%.40s", ns.ISP), ns.Rtt, ns.Serial)
+			} else {
+				fmt.Fprintf(w, "\t%v\t%v\t%v\t%v\t%v\t%v\t", ns.IPInfo.IP.String(), ns.Loc, ns.ASN, fmt.Sprintf("%.40s", ns.ISP), ns.Rtt, ns.Serial)
+			}
+			if ns.Valid && ns.ChainValid {
+				fmt.Fprintf(w, "%v\t%s\t%s", "valid", humanize.Time(time.Unix(ns.KeyInfo.Start, 0)), humanize.Time(time.Unix(ns.KeyInfo.End, 0)))
+			} else {
+				if ns.DNSSECInfo.Disabled {
+					fmt.Fprintf(w, "%v\t%s\t%s", "disabled", "", "")
+				} else {
+					fmt.Fprintf(w, "%v\t%s\t%s", "invalid", humanize.Time(time.Unix(ns.KeyInfo.Start, 0)), humanize.Time(time.Unix(ns.KeyInfo.End, 0)))
+				}
+			}
+			i++
+			fmt.Fprintln(w)
+		}
 	}
 	w.Flush()
 	done <- struct{}{}
+}
+
+func writeStats() {
+
 }
 
 func main() {
@@ -171,8 +232,8 @@ func main() {
 	}
 
 	domain := flag.Arg(0)
-	nsinfos, err := findNS(dns.Fqdn(domain))
-	if len(nsinfos) == 0 {
+	nsdatas, err := findNS(dns.Fqdn(domain))
+	if len(nsdatas) == 0 {
 		fmt.Println("no nameservers found for", domain)
 		return
 	}
@@ -189,66 +250,47 @@ func main() {
 	// check dnssec
 	chainValid, chainErr := validateChain(dns.Fqdn(domain))
 
-	wc = make(chan string)
+	wc = make(chan NSInfo)
 	done = make(chan struct{})
 	var wg sync.WaitGroup
 	go outputter()
-
-	wc <- fmt.Sprintf("NS\tIP\tLOC\tASN\tISP\trtt\tSerial\tDNSSEC\tValidFrom\tValidUntil\n")
 
 	// for now disable debuglevel (because of multiple goroutines output)
 	if *flagDebug {
 		log.Level = logrus.InfoLevel
 	}
-	for _, nsinfo := range nsinfos {
+
+	for _, nsdata := range nsdatas {
 		wg.Add(1)
-		go func(nsinfo NSInfo) {
-			output := fmt.Sprintf("%s\t", nsinfo.Name)
-			i := 0
-			for _, ip := range nsinfo.IP {
+		go func(nsinfos []NSInfo) {
+			for _, nsinfo := range nsinfos {
+				var newnsinfo NSInfo
+				ip := nsinfo.IP
 				info, _ := ipinfo(ip)
-				if i > 0 {
-					output = output + fmt.Sprintf("\t%s\t", ip.String())
-				} else {
-					output = output + fmt.Sprintf("%s\t", ip.String())
-				}
-				output = output + fmt.Sprintf("%v\tASN %#v\t%v\t", info.Loc, info.ASN, fmt.Sprintf("%.40s", info.ISP))
+				newnsinfo.IPInfo = info
+				newnsinfo.Name = nsinfo.Name
+
 				soa, rtt, err := queryRRset(domain, dns.TypeSOA, ip.String(), false)
-				if err != nil {
-					output = output + fmt.Sprintf("%s\t%v\t", "error", "error")
-				} else {
-					output = output + fmt.Sprintf("%s\t%v\t", rtt.String(), int64(soa[0].(*dns.SOA).Serial))
+				if err == nil {
+					newnsinfo.Rtt = rtt
+					newnsinfo.Serial = int64(soa[0].(*dns.SOA).Serial)
 				}
-				var keys []dns.RR
-				var keyinfo KeyInfo
-				var valid bool
-				keys, _, err = queryRRset(domain, dns.TypeDNSKEY, ip.String(), true)
-				if err != nil {
-				}
+
+				keys, _, _ := queryRRset(domain, dns.TypeDNSKEY, ip.String(), true)
 				res, _, err := query(domain, dns.TypeNS, ip.String(), true)
 				if err == nil {
-					valid, keyinfo, err = validateRRSIG(keys, res.Answer)
-				}
-				if valid && chainValid {
-					output = output + fmt.Sprintf("%v\t%s\t%s", "valid", humanize.Time(time.Unix(keyinfo.Start, 0)), humanize.Time(time.Unix(keyinfo.End, 0)))
-				} else {
-					if err != nil {
-						output = output + fmt.Sprintf("%v\t%s\t%s", "error", "", "")
-					} else {
-						if keyinfo.Start == 0 && len(keys) == 0 {
-							output = output + fmt.Sprintf("%v\t%s\t%s", "disabled", "", "")
-						} else {
-							output = output + fmt.Sprintf("%v\t%s\t%s", "invalid", humanize.Time(time.Unix(keyinfo.Start, 0)), humanize.Time(time.Unix(keyinfo.End, 0)))
-						}
+					valid, keyinfo, _ := validateRRSIG(keys, res.Answer)
+					newnsinfo.DNSSECInfo = DNSSECInfo{Valid: valid, KeyInfo: keyinfo, ChainValid: chainValid}
+					if keyinfo.Start == 0 && len(keys) == 0 {
+						newnsinfo.Disabled = true
 					}
 				}
-				output = output + fmt.Sprintln()
-				i++
+				wc <- newnsinfo
 			}
-			wc <- output
 			wg.Done()
-		}(nsinfo)
+		}(nsdata.Info)
 	}
+
 	wg.Wait()
 	close(wc)
 	s.Stop()

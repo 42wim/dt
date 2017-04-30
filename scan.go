@@ -67,7 +67,9 @@ func domainscan(domain string) {
 
 	servers, _ := findNS(dns.Fqdn(domain))
 	for _, server := range servers {
-		ips = append(ips, server.IP...)
+		for _, info := range server.Info {
+			ips = append(ips, info.IP)
+		}
 	}
 	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
 
@@ -147,7 +149,7 @@ func domainscan(domain string) {
 				}
 				respc <- ScanResponse{RR: res, NS: ns.String(), Rtt: rtt}
 			}
-		}(c, server.IP[0])
+		}(c, server.Info[0].IP)
 	}
 
 	i := -1

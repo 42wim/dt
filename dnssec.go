@@ -91,11 +91,11 @@ func validateDomain(domain string) (bool, error) {
 	keyMap := make(map[uint16]*dns.DNSKEY)
 
 	// get auth servers
-	nsinfo, err := findNS(domain)
+	nsdata, err := findNS(domain)
 	if err != nil {
 	}
-	log.Debugf("Asking NS (%s) DNSKEY of %s", nsinfo[0].IP[0].String(), domain)
-	res, _, err := query(domain, dns.TypeDNSKEY, nsinfo[0].IP[0].String(), true)
+	log.Debugf("Asking NS (%s) DNSKEY of %s", nsdata[0].Info[0].IP.String(), domain)
+	res, _, err := query(domain, dns.TypeDNSKEY, nsdata[0].Info[0].IP.String(), true)
 	if err != nil {
 		return false, err
 	}
@@ -108,7 +108,7 @@ func validateDomain(domain string) (bool, error) {
 		}
 	}
 	if len(keyMap) == 0 {
-		return false, fmt.Errorf("Validation failed. No DNSKEY found for %s on %s", domain, nsinfo[0].IP[0].String())
+		return false, fmt.Errorf("Validation failed. No DNSKEY found for %s on %s", domain, nsdata[0].Info[0].IP.String())
 	}
 
 	valid, info, err := validateDNSKEY(res.Answer)
@@ -121,15 +121,15 @@ func validateDomain(domain string) (bool, error) {
 
 	// get auth servers of parent
 	log.Debugf("Finding NS of parent: %s", dns.Fqdn(getParentDomain(domain)))
-	nsinfo, err = findNS(getParentDomain(domain))
+	nsdata, err = findNS(getParentDomain(domain))
 	if err != nil {
 	}
 
 	// asking parent about DS
-	log.Debugf("Asking parent %s (%s) DS of %s", nsinfo[0].IP[0].String(), getParentDomain(domain), domain)
-	res, _, err = query(domain, dns.TypeDS, nsinfo[0].IP[0].String(), true)
+	log.Debugf("Asking parent %s (%s) DS of %s", nsdata[0].Info[0].IP.String(), getParentDomain(domain), domain)
+	res, _, err = query(domain, dns.TypeDS, nsdata[0].Info[0].IP.String(), true)
 	if err == nil && len(res.Answer) == 0 {
-		return false, fmt.Errorf("Validation failed. No DS records found for %s on %v\n", domain, nsinfo[0].IP[0].String())
+		return false, fmt.Errorf("Validation failed. No DS records found for %s on %v\n", domain, nsdata[0].Info[0].IP.String())
 	}
 
 	// look for all parent DS and compare digests
@@ -140,7 +140,7 @@ func validateDomain(domain string) (bool, error) {
 			// does the child has a DNSKEY with the found KeyTag ?
 			key := keyMap[parentDS.KeyTag]
 			if key == nil {
-				log.Debugf("No DNSKEY (keytag %v) in %s found that matches DS (keytag %v) in %s", parentDS.KeyTag, domain, parentDS.KeyTag, nsinfo[0].IP[0].String())
+				log.Debugf("No DNSKEY (keytag %v) in %s found that matches DS (keytag %v) in %s", parentDS.KeyTag, domain, parentDS.KeyTag, nsdata[0].Info[0].IP.String())
 				continue
 			}
 			// create the child digest based on the parentDS digesttype
