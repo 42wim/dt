@@ -119,6 +119,9 @@ func query(q string, qtype uint16, server string, sec bool) (*dns.Msg, time.Dura
 	if err != nil {
 		return nil, 0, err
 	}
+	if in.Rcode != 0 {
+		return in, rtt, fmt.Errorf("failure: %s", dns.RcodeToString[in.Rcode])
+	}
 	return in, rtt, nil
 }
 
