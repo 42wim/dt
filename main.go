@@ -37,6 +37,7 @@ type NSInfo struct {
 type NSData struct {
 	Name string
 	Info []NSInfo
+	IP   []net.IP
 }
 
 type IPInfo struct {
@@ -61,6 +62,12 @@ type KeyInfo struct {
 type DomainStat struct {
 	Domain string
 	NS     []NSInfo
+}
+
+type Response struct {
+	RR  []dns.RR
+	IP  net.IP
+	Rtt time.Duration
 }
 
 func ipinfo(ip net.IP) (IPInfo, error) {
@@ -144,6 +151,7 @@ func findNS(domain string) ([]NSData, error) {
 		for _, ip := range ips {
 			nsinfos = append(nsinfos, NSInfo{IPInfo: IPInfo{IP: ip}, Name: ns})
 		}
+		nsdata.IP = ips
 		nsdata.Info = nsinfos
 		nsdatas = append(nsdatas, nsdata)
 	}
@@ -303,6 +311,18 @@ func main() {
 	// enable debug again if needed
 	if *flagDebug {
 		log.Level = logrus.DebugLevel
+	}
+
+	g := &Glue{NS: nsdatas}
+	glue, missed, err := g.CheckParent(domain)
+	if !glue {
+		// TODO print more information
+		fmt.Printf("GLUE: no glue records found for %s in NS of parent %s\n", missed, dns.Fqdn(getParentDomain(domain)))
+	}
+	glue, missed, err = g.CheckSelf(domain)
+	if !glue {
+		// TODO print more information
+		fmt.Printf("GLUE: no glue records found for %s in NS of %s\n", missed, dns.Fqdn(domain))
 	}
 
 	if *flagScan {
