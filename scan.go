@@ -130,10 +130,7 @@ func domainscan(domain string) {
 					if err != nil {
 						//fmt.Println(err)
 					} else {
-						a := extractRR(res.Msg.Answer, dns.TypeA)
-						cname := extractRR(res.Msg.Answer, dns.TypeCNAME)
-						rrs = append(rrs, a...)
-						rrs = append(rrs, cname...)
+						rrs = extractRR(res.Msg.Answer, dns.TypeA, dns.TypeCNAME)
 					}
 					res2, rtt, err := queryRRset(dns.Fqdn(entry+domain), dns.TypeAAAA, ns.String(), true)
 					if err != nil && len(res2) != 0 {
