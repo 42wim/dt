@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net"
 
 	"github.com/miekg/dns"
@@ -8,6 +9,7 @@ import (
 
 type Glue struct {
 	NS []NSData
+	Report
 }
 
 func (g *Glue) CheckParent(domain string) (bool, []string, error) {
@@ -26,6 +28,32 @@ func (g *Glue) CheckSelf(domain string) (bool, []string, error) {
 	}
 	ok, res := g.Compare(selfGlue)
 	return ok, res, nil
+}
+
+func (g *Glue) CreateReport(domain string) {
+	res := ReportResult{}
+	rep := Report{}
+	var missed []string
+	var err error
+	res.Status, missed, err = g.CheckParent(domain)
+	if err != nil {
+		res.Error = err.Error()
+	}
+	if !res.Status {
+		res.Result = fmt.Sprintf("FAIL: no glue records found for %s in NS of parent %s", missed, dns.Fqdn(getParentDomain(domain)))
+	}
+	rep.Result = append(rep.Result, res)
+	res = ReportResult{Result: fmt.Sprintf("OK  : glue records found for all nameservers in NS record of %s", dns.Fqdn(domain))}
+	res.Status, missed, err = g.CheckSelf(domain)
+	if !res.Status {
+		res.Result = fmt.Sprintf("FAIL: no glue records found for %s in NS of %s", missed, dns.Fqdn(domain))
+	}
+	if err != nil {
+		res.Error = err.Error()
+	}
+	rep.Result = append(rep.Result, res)
+	rep.Type = "GLUE"
+	g.Report = rep
 }
 
 func (g *Glue) Compare(parentGlue []net.IP) (bool, []string) {
