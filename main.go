@@ -71,6 +71,17 @@ type Response struct {
 	Rtt    time.Duration
 }
 
+type Report struct {
+	Type   string
+	Result []ReportResult
+}
+
+type ReportResult struct {
+	Result string
+	Status bool
+	Error  string
+}
+
 func outputter() {
 	const padding = 1
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, padding, ' ', tabwriter.Debug)
@@ -214,7 +225,9 @@ func main() {
 	<-done
 
 	if chainErr != nil {
-		fmt.Printf("DNSSEC: %s\n", chainErr)
+		fmt.Printf("DNSSEC\n\t FAIL: %s\n", chainErr)
+	} else {
+		fmt.Printf("DNSSEC\n\t OK: DNSKEY validated. Chain validated\n")
 	}
 
 	// enable debug again if needed
@@ -222,17 +235,19 @@ func main() {
 		log.Level = logrus.DebugLevel
 	}
 
-	// GLUE
+	// report
 	g := &Glue{NS: nsdatas}
-	glue, missed, err := g.CheckParent(domain)
-	if !glue {
-		// TODO print more information
-		fmt.Printf("GLUE: no glue records found for %s in NS of parent %s\n", missed, dns.Fqdn(getParentDomain(domain)))
+	g.CreateReport(domain)
+	fmt.Println(g.Report.Type)
+	for _, res := range g.Report.Result {
+		fmt.Println("\t", res.Result)
 	}
-	glue, missed, err = g.CheckSelf(domain)
-	if !glue {
-		// TODO print more information
-		fmt.Printf("GLUE: no glue records found for %s in NS of %s\n", missed, dns.Fqdn(domain))
+
+	soa := &SOACheck{NS: nsdatas}
+	soa.CreateReport(domain)
+	fmt.Println(soa.Report.Type)
+	for _, res := range soa.Report.Result {
+		fmt.Println("\t", res.Result)
 	}
 
 	if *flagScan {
