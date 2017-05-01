@@ -6,6 +6,7 @@ DNS tool that displays information about your domain.
 * common records scanning (use -scan)
 * validate DNSSEC chain (use -debug to see more info)
 * change query speed for scanning (default 10 queries per second)
+* reporting DNSSEC, SOA, glue records
 
 NOTE: uses 8.8.8.8 for initial domain lookup.  
 Feedback, issues and PR's are welcome.
@@ -13,14 +14,14 @@ Feedback, issues and PR's are welcome.
 # TODO
 * daemon mode
 * JSON API
-* grading
+* grading / more reporting
 * keeping history
 
 
 # Installing
 
 ## Binaries
-Binaries can be found [here] (https://github.com/42wim/dt/releases/)
+Binaries can be found [here](https://github.com/42wim/dt/releases/)
 
 ## Building
 Go 1.6.3+ is required. Make sure you have [Go](https://golang.org/doc/install) properly installed, including setting up your [GOPATH] (https://golang.org/doc/code.html#GOPATH)
@@ -75,6 +76,15 @@ manus.authdns.ripe.net. |193.0.9.7              |NL  |ASN 197000 |RIPE-NCC-AUTHD
                         |2001:67c:e0::7         |NL  |ASN 197000 |RIPE-NCC-AUTHDNS-AS Reseaux IP Europeens |11.403502ms  |1492613104 |valid   |10 hours ago |4 weeks from now
 tinnie.arin.net.        |199.212.0.53           |US  |ASN 393225 |ARIN-PFS-IAD - ARIN Operations, US       |94.890834ms  |1492613104 |valid   |10 hours ago |4 weeks from now
                         |2001:500:13::c7d4:35   |US  |ASN 53535  |ARIN-PFS-ANYCAST - ARIN Operations, US   |96.854587ms  |1492613104 |valid   |10 hours ago |4 weeks from now
+DNSSEC
+         OK: DNSKEY validated. Chain validated
+GLUE
+         FAIL: no glue records found for [192.5.4.1 2001:500:2e::1] in NS of parent net.
+         FAIL: no glue records found for [192.5.4.1 2001:500:13::c7d4:35 2001:502:cbe4::33 2001:500:2e::1 209.112.113.33 69.36.145.33 202.12.28.140 2001:500:7967::2:33 2620:74:19::33 2001:dc0:1:0:4777::140 199.212.0.53 209.112.114.33] in NS of ripe.net.
+SOA
+         OK  : SOA of all nameservers are identical
+         FAIL: Serial is not in the recommended format of YYYYMMDDnn.
+         OK  : MNAME manus.authdns.ripe.net. is listed at the parent servers.
 ```
 
 ```
