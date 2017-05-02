@@ -49,9 +49,9 @@ func (c *MXCheck) Identical() ReportResult {
 			for _, mx := range ns.MX {
 				mxstr = append(mxstr, mx.String()+"\n\t ")
 			}
+			sort.Strings(mxstr)
+			m[strings.Join(mxstr, "")] = append(m[strings.Join(mxstr, "")], ns.IP)
 		}
-		sort.Strings(mxstr)
-		m[strings.Join(mxstr, "")] = append(m[strings.Join(mxstr, "")], ns.IP)
 	}
 	res := ReportResult{}
 	if len(m) > 1 {
