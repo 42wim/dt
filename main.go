@@ -77,9 +77,10 @@ type Report struct {
 }
 
 type ReportResult struct {
-	Result string
-	Status bool
-	Error  string
+	Result  string
+	Status  bool
+	Error   string
+	Records []string
 }
 
 func outputter() {
@@ -224,30 +225,47 @@ func main() {
 	s.Stop()
 	<-done
 
+	// enable debug again if needed
+	if *flagDebug {
+		log.Level = logrus.DebugLevel
+	}
+
+	reports := []Report{}
+	// report
+	g := &Glue{NS: nsdatas}
+	g.CreateReport(domain)
+	reports = append(reports, g.Report)
+	soa := &SOACheck{NS: nsdatas}
+	soa.CreateReport(domain)
+	reports = append(reports, soa.Report)
+	mx := &MXCheck{NS: nsdatas}
+	mx.CreateReport(domain)
+	reports = append(reports, mx.Report)
+	spam := &SpamCheck{NS: nsdatas}
+	spam.CreateReport(domain)
+	reports = append(reports, spam.Report)
+
+	fmt.Println()
+	for _, report := range reports {
+		for _, res := range report.Result {
+			for _, record := range res.Records {
+				fmt.Println(record)
+			}
+		}
+	}
+	fmt.Println()
+
 	if chainErr != nil {
 		fmt.Printf("DNSSEC\n\t FAIL: %s\n", chainErr)
 	} else {
 		fmt.Printf("DNSSEC\n\t OK: DNSKEY validated. Chain validated\n")
 	}
 
-	// enable debug again if needed
-	if *flagDebug {
-		log.Level = logrus.DebugLevel
-	}
-
-	// report
-	g := &Glue{NS: nsdatas}
-	g.CreateReport(domain)
-	fmt.Println(g.Report.Type)
-	for _, res := range g.Report.Result {
-		fmt.Println("\t", res.Result)
-	}
-
-	soa := &SOACheck{NS: nsdatas}
-	soa.CreateReport(domain)
-	fmt.Println(soa.Report.Type)
-	for _, res := range soa.Report.Result {
-		fmt.Println("\t", res.Result)
+	for _, report := range reports {
+		fmt.Println(report.Type)
+		for _, res := range report.Result {
+			fmt.Println("\t", res.Result)
+		}
 	}
 
 	if *flagScan {
