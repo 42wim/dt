@@ -92,9 +92,9 @@ func (c *SOACheck) Values() []ReportResult {
 	}
 	if checkSerial(soa.Serial) {
 		results = append(results, ReportResult{Result: "OK  : Serial format appears to be in the recommended format of YYYYMMDDnn.",
-			Status: true})
+			Status: true, Records: []string{soa.String()}})
 	} else {
-		results = append(results, ReportResult{Result: "FAIL: Serial is not in the recommended format of YYYYMMDDnn.",
+		results = append(results, ReportResult{Result: "WARN: Serial is not in the recommended format of YYYYMMDDnn.",
 			Status: false})
 	}
 	if c.checkMname(soa.Ns) {
