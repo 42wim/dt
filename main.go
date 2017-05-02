@@ -232,6 +232,9 @@ func main() {
 
 	reports := []Report{}
 	// report
+	nsc := &NSCheck{NS: nsdatas}
+	nsc.CreateReport(domain)
+	reports = append(reports, nsc.Report)
 	g := &Glue{NS: nsdatas}
 	g.CreateReport(domain)
 	reports = append(reports, g.Report)
