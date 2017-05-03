@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/miekg/dns"
+	"net"
 	"sort"
 	"strings"
 )
@@ -17,13 +18,14 @@ type MXData struct {
 	Name  string
 	IP    string
 	MX    []dns.RR
+	MXIP  map[string][]net.IP
 	Error string
 }
 
 func (c *MXCheck) Scan(domain string) {
 	for _, ns := range c.NS {
 		for _, nsip := range ns.IP {
-			data := MXData{Name: ns.Name, IP: nsip.String()}
+			data := MXData{Name: ns.Name, IP: nsip.String(), MXIP: make(map[string][]net.IP)}
 			mx, _, err := queryRRset(domain, dns.TypeMX, nsip.String(), true)
 			if err != nil {
 				data.Error = fmt.Sprintf("MX check failed on %s: %s", nsip.String(), err)
@@ -36,6 +38,11 @@ func (c *MXCheck) Scan(domain string) {
 				break
 			}
 			data.MX = mx
+			// TODO only lookup once
+			for _, mx := range data.MX {
+				data.MXIP[mx.(*dns.MX).Mx] = append(data.MXIP[mx.(*dns.MX).Mx], getIP(mx.(*dns.MX).Mx, dns.TypeA, resolver)...)
+				data.MXIP[mx.(*dns.MX).Mx] = append(data.MXIP[mx.(*dns.MX).Mx], getIP(mx.(*dns.MX).Mx, dns.TypeAAAA, resolver)...)
+			}
 			c.MX = append(c.MX, data)
 		}
 	}
@@ -67,6 +74,36 @@ func (c *MXCheck) Identical() ReportResult {
 	return res
 }
 
+func (c *MXCheck) checkRFC1918() bool {
+	for _, mx := range c.MX {
+		if len(mx.MXIP) > 0 {
+			for _, ips := range mx.MXIP {
+				for _, ip := range ips {
+					if isRFC1918(ip) {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+func (c *MXCheck) checkDuplicateIP() map[string][]string {
+	m := make(map[string][]string)
+	for _, mx := range c.MX {
+		if len(mx.MXIP) > 0 {
+			for name, ips := range mx.MXIP {
+				for _, ip := range ips {
+					m[ip.String()] = append(m[ip.String()], name)
+				}
+			}
+			break
+		}
+	}
+	return m
+}
+
 func (c *MXCheck) Values() []ReportResult {
 	var results []ReportResult
 	var rrset []dns.RR
@@ -88,10 +125,30 @@ func (c *MXCheck) Values() []ReportResult {
 			Status: false})
 	}
 
+	if !c.checkRFC1918() {
+		results = append(results, ReportResult{Result: "OK  : Your MX records have public / routable addresses.",
+			Status: true})
+	} else {
+		results = append(results, ReportResult{Result: "FAIL: Some of your MX records have non-routable (RFC1918) addresses.",
+			Status: false})
+	}
+
+	m := c.checkDuplicateIP()
+	duplicate := false
+	for k, v := range m {
+		if len(v) > 1 {
+			results = append(results, ReportResult{Result: fmt.Sprintf("WARN: Same IP %s is used by multiple MX records %v.", k, v),
+				Status: false})
+			duplicate = true
+		}
+	}
+	if !duplicate {
+		results = append(results, ReportResult{Result: "OK  : Your MX records resolve to different ips.",
+			Status: false})
+
+	}
 	//TODO
 	// cname check
-	// duplicate IP check
-	// rfc1918 check
 	// multiple subnets
 	return results
 }
