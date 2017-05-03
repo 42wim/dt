@@ -82,6 +82,17 @@ func (c *SOACheck) checkMname(mname string) bool {
 	return false
 }
 
+func (c *SOACheck) checkRFC1918() bool {
+	for _, ns := range c.NS {
+		for _, ip := range ns.IP {
+			if isRFC1918(ip) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (c *SOACheck) Values() []ReportResult {
 	var soa *dns.SOA
 	var results []ReportResult
@@ -102,6 +113,13 @@ func (c *SOACheck) Values() []ReportResult {
 			Status: true})
 	} else {
 		results = append(results, ReportResult{Result: fmt.Sprintf("FAIL: MNAME %s is not listed at the parent servers.", soa.Ns),
+			Status: false})
+	}
+	if !c.checkRFC1918() {
+		results = append(results, ReportResult{Result: "OK  : Your nameservers have public / routable addresses.",
+			Status: true})
+	} else {
+		results = append(results, ReportResult{Result: "FAIL: Some of your nameservers have non-routable (RFC1918) addresses.",
 			Status: false})
 	}
 	return results

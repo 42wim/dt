@@ -128,3 +128,10 @@ func getParentDomain(domain string) string {
 	}
 	return "."
 }
+
+func isRFC1918(ip net.IP) bool {
+	ten := net.IPNet{IP: net.ParseIP("10.0.0.0"), Mask: net.CIDRMask(8, 32)}
+	oneNineTwo := net.IPNet{IP: net.ParseIP("192.168.0.0"), Mask: net.CIDRMask(16, 32)}
+	oneSevenTwo := net.IPNet{IP: net.ParseIP("172.16.0.0"), Mask: net.CIDRMask(12, 32)}
+	return ten.Contains(ip) || oneNineTwo.Contains(ip) || oneSevenTwo.Contains(ip)
+}
