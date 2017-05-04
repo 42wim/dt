@@ -58,6 +58,7 @@ func query(q string, qtype uint16, server string, sec bool) (Response, error) {
 	c := new(dns.Client)
 	m := prepMsg()
 	m.CheckingDisabled = true
+	m.RecursionDesired = true
 	if sec {
 		m.CheckingDisabled = false
 		m.SetEdns0(4096, true)
