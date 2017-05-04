@@ -15,11 +15,13 @@ type NSCheck struct {
 }
 
 type NSCheckData struct {
-	Name  string
-	IP    string
-	NS    []dns.RR
-	Error string
-	Auth  bool
+	Name      string
+	IP        string
+	NS        []dns.RR
+	CNAME     []dns.RR
+	Error     string
+	Auth      bool
+	Recursive bool
 }
 
 func (c *NSCheck) Scan(domain string) {
@@ -42,8 +44,83 @@ func (c *NSCheck) Scan(domain string) {
 			}
 			data.NS = nsrr
 			data.Auth = res.Msg.Authoritative
+			data.Recursive = res.Msg.RecursionAvailable
 			c.NSCheck = append(c.NSCheck, data)
 		}
+	}
+}
+
+func (c *NSCheck) CheckCNAME() []ReportResult {
+	rep := []ReportResult{}
+	m := make(map[string]bool)
+	for _, ns := range c.NSCheck {
+		// skip lookup if already done
+		if _, ok := m[ns.Name]; ok {
+			break
+		}
+		// asking recursor for now
+		res, err := query(dns.Fqdn(ns.Name), dns.TypeA, resolver, true)
+		if err != nil {
+			break
+		}
+		cname := extractRR(res.Msg.Answer, dns.TypeCNAME)
+		if len(cname) > 0 {
+			rep = append(rep, ReportResult{Result: fmt.Sprintf("FAIL: Your nameserver (%s) is a CNAME.", ns.Name),
+				Status: false})
+		}
+		res, err = query(dns.Fqdn(ns.Name), dns.TypeAAAA, resolver, true)
+		if err != nil {
+			break
+		}
+		cname = extractRR(res.Msg.Answer, dns.TypeCNAME)
+		if len(cname) > 0 {
+			rep = append(rep, ReportResult{Result: fmt.Sprintf("FAIL: Your nameserver (%s) is a CNAME.", ns.Name),
+				Status: false})
+		}
+		m[ns.Name] = true
+	}
+	if len(rep) == 0 {
+		rep = append(rep, ReportResult{Result: "OK  : No CNAMEs found for your NS records",
+			Status: true})
+	}
+	return rep
+}
+
+func (c *NSCheck) CheckParent(domain string) ReportResult {
+	nsdata, err := findNS(getParentDomain(domain))
+	if err != nil {
+		return ReportResult{}
+	}
+	var rrset []dns.RR
+loop:
+	for _, ns := range nsdata {
+		for _, nsip := range ns.IP {
+			res, err := query(dns.Fqdn(domain), dns.TypeNS, nsip.String(), true)
+			if err != nil {
+				break
+			}
+			rrset = extractRR(res.Msg.Ns, dns.TypeNS)
+			if len(rrset) > 0 {
+				break loop
+			}
+		}
+	}
+	m := make(map[string]bool)
+	for _, rr := range rrset {
+		m[dns.Fqdn(rr.(*dns.NS).Ns)] = true
+	}
+	missing := []string{}
+	for _, ns := range c.NS {
+		if _, ok := m[ns.Name]; !ok {
+			missing = append(missing, ns.Name)
+		}
+	}
+	if len(missing) > 0 {
+		return ReportResult{Result: fmt.Sprintf("FAIL: The following nameservers are not listed at the parent nameservers: %s", missing),
+			Status: false}
+	} else {
+		return ReportResult{Result: "OK  : Your nameservers are also listed at the parent nameservers",
+			Status: true}
 	}
 }
 
@@ -141,6 +218,23 @@ func (c *NSCheck) Auth() []ReportResult {
 	return res
 }
 
+func (c *NSCheck) Recursive() []ReportResult {
+	res := []ReportResult{}
+	ok := true
+	for _, ns := range c.NSCheck {
+		if len(ns.NS) > 0 && ns.Recursive {
+			res = append(res, ReportResult{Result: fmt.Sprintf("WARN: %s (%s) allows recursive queries.", ns.Name, ns.IP),
+				Status: false})
+			ok = false
+		}
+	}
+	if ok {
+		res = append(res, ReportResult{Result: "OK  : All nameservers report they are not allowing recursive queries.",
+			Status: true})
+	}
+	return res
+}
+
 func (c *NSCheck) Values() []ReportResult {
 	var results []ReportResult
 	var rrset []dns.RR
@@ -161,10 +255,19 @@ func (c *NSCheck) Values() []ReportResult {
 		results = append(results, ReportResult{Result: fmt.Sprintf("WARN: Only %v nameserver found. Extra nameservers increases reliability", len(rrset)),
 			Status: false})
 	}
+
+	for _, ns := range c.NSCheck {
+		if ns.NS != nil {
+			if len(ns.CNAME) > 1 {
+				results = append(results, ReportResult{Result: fmt.Sprintf("FAIL: NS %s is a CNAME for %s", ns.Name, ns.CNAME[0].(*dns.CNAME).Target),
+					Status: false})
+			}
+		}
+	}
+
 	return results
 
 	//TODO
-	// check NS at parent, compare with domain NS
 	// check if NS actually response
 	// stealth records
 
@@ -178,4 +281,7 @@ func (c *NSCheck) CreateReport(domain string) {
 	c.Report.Result = append(c.Report.Result, c.ASN())
 	c.Report.Result = append(c.Report.Result, c.IPCheck()...)
 	c.Report.Result = append(c.Report.Result, c.Auth()...)
+	c.Report.Result = append(c.Report.Result, c.Recursive()...)
+	c.Report.Result = append(c.Report.Result, c.CheckParent(domain))
+	c.Report.Result = append(c.Report.Result, c.CheckCNAME()...)
 }
