@@ -7,16 +7,16 @@ DNS tool that displays information about your domain.
 * validate DNSSEC chain (use -debug to see more info)
 * change query speed for scanning (default 10 queries per second)
 * reporting DNSSEC, SOA, glue records
+* For implemented checks see [#1](https://github.com/42wim/dt/issues/1)
 
-NOTE: uses 8.8.8.8 for initial domain lookup.  
 Feedback, issues and PR's are welcome.
 
 # TODO
 * daemon mode
 * JSON API
-* grading / more reporting
+* grading 
 * keeping history
-
+* specify resolver (now 8.8.8.8 is used by default when resolving is needed)
 
 # Installing
 
