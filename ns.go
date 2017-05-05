@@ -86,10 +86,11 @@ func (c *NSCheck) CheckCNAME() []ReportResult {
 	return rep
 }
 
-func (c *NSCheck) CheckParent(domain string) ReportResult {
+func (c *NSCheck) CheckParent(domain string) []ReportResult {
+	var rep []ReportResult
 	nsdata, err := findNS(getParentDomain(domain))
 	if err != nil {
-		return ReportResult{}
+		return []ReportResult{}
 	}
 	var rrset []dns.RR
 loop:
@@ -113,15 +114,34 @@ loop:
 	for _, ns := range c.NS {
 		if _, ok := m[ns.Name]; !ok {
 			missing = append(missing, ns.Name)
+		} else {
+			m[ns.Name] = false
+		}
+
+	}
+	if len(missing) > 0 {
+		rep = append(rep, ReportResult{Result: fmt.Sprintf("FAIL: The following nameservers are not listed as NS at the parent nameservers: %s", missing),
+			Status: false})
+	} else {
+		rep = append(rep, ReportResult{Result: "OK  : Your nameservers are also listed as NS at the parent nameservers",
+			Status: true})
+	}
+
+	// find the records that are sent by parent NS but arent in the domain NS
+	missing = []string{}
+	for k, v := range m {
+		if v == true {
+			missing = append(missing, k)
 		}
 	}
 	if len(missing) > 0 {
-		return ReportResult{Result: fmt.Sprintf("FAIL: The following nameservers are not listed at the parent nameservers: %s", missing),
-			Status: false}
+		rep = append(rep, ReportResult{Result: fmt.Sprintf("FAIL: The following nameservers are listed at the parent but not as NS at your nameservers: %s", missing),
+			Status: false})
 	} else {
-		return ReportResult{Result: "OK  : Your nameservers are also listed at the parent nameservers",
-			Status: true}
+		rep = append(rep, ReportResult{Result: "OK  : Your parent nameservers are also listed as NS at your nameservers",
+			Status: true})
 	}
+	return rep
 }
 
 func (c *NSCheck) Identical() ReportResult {
@@ -282,6 +302,6 @@ func (c *NSCheck) CreateReport(domain string) {
 	c.Report.Result = append(c.Report.Result, c.IPCheck()...)
 	c.Report.Result = append(c.Report.Result, c.Auth()...)
 	c.Report.Result = append(c.Report.Result, c.Recursive()...)
-	c.Report.Result = append(c.Report.Result, c.CheckParent(domain))
+	c.Report.Result = append(c.Report.Result, c.CheckParent(domain)...)
 	c.Report.Result = append(c.Report.Result, c.CheckCNAME()...)
 }
