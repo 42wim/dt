@@ -7,8 +7,9 @@ import (
 )
 
 type SOACheck struct {
-	NS  []NSData
-	SOA []SOAData
+	NS     []NSData
+	SOA    []SOAData
+	Domain string
 	Report
 }
 
@@ -20,6 +21,7 @@ type SOAData struct {
 }
 
 func (c *SOACheck) Scan(domain string) {
+	c.Domain = domain
 	for _, ns := range c.NS {
 		for _, nsip := range ns.IP {
 			data := SOAData{Name: ns.Name, IP: nsip.String()}
@@ -38,6 +40,34 @@ func (c *SOACheck) Scan(domain string) {
 			c.SOA = append(c.SOA, data)
 		}
 	}
+}
+
+func (c *SOACheck) checkMname(mname string) bool {
+	nsdata, err := findNS(getParentDomain(c.Domain))
+	if err != nil {
+		return false
+	}
+	var rrset []dns.RR
+loop:
+	for _, ns := range nsdata {
+		for _, nsip := range ns.IP {
+			res, err := query(dns.Fqdn(c.Domain), dns.TypeNS, nsip.String(), true)
+			if err != nil {
+				break
+			}
+			rrset = extractRR(res.Msg.Ns, dns.TypeNS)
+			if len(rrset) > 0 {
+				break loop
+			}
+		}
+	}
+	for _, pns := range rrset {
+		if pns.(*dns.NS).Ns == mname {
+			return true
+		}
+	}
+	return false
+
 }
 
 func (c *SOACheck) Identical() ReportResult {
@@ -71,15 +101,6 @@ func checkSerial(serial uint32) bool {
 		return false
 	}
 	return true
-}
-
-func (c *SOACheck) checkMname(mname string) bool {
-	for _, ns := range c.NS {
-		if mname == dns.Fqdn(ns.Name) {
-			return true
-		}
-	}
-	return false
 }
 
 func (c *SOACheck) checkRFC1918() bool {
