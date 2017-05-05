@@ -244,6 +244,9 @@ func main() {
 	mx := &MXCheck{NS: nsdatas}
 	mx.CreateReport(domain)
 	reports = append(reports, mx.Report)
+	web := &WebCheck{NS: nsdatas}
+	web.CreateReport(domain)
+	reports = append(reports, web.Report)
 	spam := &SpamCheck{NS: nsdatas}
 	spam.CreateReport(domain)
 	reports = append(reports, spam.Report)
