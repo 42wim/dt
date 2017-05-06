@@ -227,11 +227,12 @@ func (c *MXCheck) Values() []ReportResult {
 	return results
 }
 
-func (c *MXCheck) CreateReport(domain string) {
+func (c *MXCheck) CreateReport(domain string) Report {
 	c.Scan(domain)
 	c.Report.Type = "MX"
 	c.Report.Result = append(c.Report.Result, c.Identical())
 	c.Report.Result = append(c.Report.Result, c.Values()...)
 	c.Report.Result = append(c.Report.Result, c.CheckCNAME()...)
 	c.Report.Result = append(c.Report.Result, c.CheckReverse()...)
+	return c.Report
 }

@@ -231,25 +231,19 @@ func main() {
 	}
 
 	reports := []Report{}
-	// report
-	nsc := &NSCheck{NS: nsdatas}
-	nsc.CreateReport(domain)
-	reports = append(reports, nsc.Report)
-	g := &Glue{NS: nsdatas}
-	g.CreateReport(domain)
-	reports = append(reports, g.Report)
-	soa := &SOACheck{NS: nsdatas}
-	soa.CreateReport(domain)
-	reports = append(reports, soa.Report)
-	mx := &MXCheck{NS: nsdatas}
-	mx.CreateReport(domain)
-	reports = append(reports, mx.Report)
-	web := &WebCheck{NS: nsdatas}
-	web.CreateReport(domain)
-	reports = append(reports, web.Report)
-	spam := &SpamCheck{NS: nsdatas}
-	spam.CreateReport(domain)
-	reports = append(reports, spam.Report)
+
+	checkers := []Checker{
+		&NSCheck{NS: nsdatas},
+		&Glue{NS: nsdatas},
+		&SOACheck{NS: nsdatas},
+		&MXCheck{NS: nsdatas},
+		&WebCheck{NS: nsdatas},
+		&SpamCheck{NS: nsdatas}}
+
+	// TODO concurrency
+	for _, checker := range checkers {
+		reports = append(reports, checker.CreateReport(domain))
+	}
 
 	fmt.Println()
 	for _, report := range reports {

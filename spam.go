@@ -141,8 +141,9 @@ func (c *SpamCheck) Values() []ReportResult {
 	return results
 }
 
-func (c *SpamCheck) CreateReport(domain string) {
+func (c *SpamCheck) CreateReport(domain string) Report {
 	c.Scan(domain)
 	c.Report.Type = "Spam"
 	c.Report.Result = append(c.Report.Result, c.Values()...)
+	return c.Report
 }

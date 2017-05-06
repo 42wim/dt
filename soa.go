@@ -146,9 +146,10 @@ func (c *SOACheck) Values() []ReportResult {
 	return results
 }
 
-func (c *SOACheck) CreateReport(domain string) {
+func (c *SOACheck) CreateReport(domain string) Report {
 	c.Scan(domain)
 	c.Report.Type = "SOA"
 	c.Report.Result = append(c.Report.Result, c.Identical())
 	c.Report.Result = append(c.Report.Result, c.Values()...)
+	return c.Report
 }

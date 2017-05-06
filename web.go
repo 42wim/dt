@@ -129,10 +129,11 @@ func (c *WebCheck) Values() []ReportResult {
 	return results
 }
 
-func (c *WebCheck) CreateReport(domain string) {
+func (c *WebCheck) CreateReport(domain string) Report {
 	c.Scan(domain)
 	c.Report.Type = "Web"
 	c.Report.Result = append(c.Report.Result, c.CheckWww()...)
 	c.Report.Result = append(c.Report.Result, c.CheckApex()...)
 	c.Report.Result = append(c.Report.Result, c.Values()...)
+	return c.Report
 }

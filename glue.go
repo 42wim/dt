@@ -12,6 +12,10 @@ type Glue struct {
 	Report
 }
 
+func (g *Glue) Scan(domain string) {
+
+}
+
 func (g *Glue) CheckParent(domain string) (bool, []string, error) {
 	parentGlue, err := getParentGlue(domain)
 	if err != nil {
@@ -30,7 +34,7 @@ func (g *Glue) CheckSelf(domain string) (bool, []string, error) {
 	return ok, res, nil
 }
 
-func (g *Glue) CreateReport(domain string) {
+func (g *Glue) CreateReport(domain string) Report {
 	res := ReportResult{}
 	rep := Report{}
 	var missed []string
@@ -60,6 +64,7 @@ func (g *Glue) CreateReport(domain string) {
 	rep.Result = append(rep.Result, res)
 	rep.Type = "GLUE"
 	g.Report = rep
+	return rep
 }
 
 func (g *Glue) Compare(parentGlue []net.IP) (bool, []string) {

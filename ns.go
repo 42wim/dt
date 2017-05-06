@@ -302,7 +302,7 @@ func (c *NSCheck) Values() []ReportResult {
 	return results
 }
 
-func (c *NSCheck) CreateReport(domain string) {
+func (c *NSCheck) CreateReport(domain string) Report {
 	c.Scan(domain)
 	c.Report.Type = "NS"
 	c.Report.Result = append(c.Report.Result, c.Identical())
@@ -313,4 +313,5 @@ func (c *NSCheck) CreateReport(domain string) {
 	c.Report.Result = append(c.Report.Result, c.Recursive()...)
 	c.Report.Result = append(c.Report.Result, c.CheckParent(domain)...)
 	c.Report.Result = append(c.Report.Result, c.CheckCNAME()...)
+	return c.Report
 }
