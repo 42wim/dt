@@ -83,12 +83,25 @@ func (c *SpamCheck) Values() []ReportResult {
 		}
 	}
 	if len(rrset) > 0 {
+		results = append(results, ReportResult{Result: "OK  : DMARC records found.",
+			Status: true})
 		records := []string{}
 		for _, rr := range rrset {
 			records = append(records, rr.String())
+			if strings.Contains(rr.String(), "p=none") {
+				results = append(results, ReportResult{Result: "WARN: DMARC with monitoring policy found.",
+					Status: false})
+			}
+			if strings.Contains(rr.String(), "p=quarantine") {
+				results = append(results, ReportResult{Result: "WARN: DMARC with quarantine policy found.",
+					Status: false})
+			}
+			if strings.Contains(rr.String(), "p=reject") {
+				results = append(results, ReportResult{Result: "OK  : DMARC with reject policy.",
+					Status: false})
+			}
 		}
-		results = append(results, ReportResult{Result: "OK  : DMARC records found.",
-			Status: true, Records: records})
+		results = append(results, ReportResult{Status: true, Records: records})
 	} else {
 		results = append(results, ReportResult{Result: "WARN: No DMARC records found. Along with DKIM and SPF, DMARC helps prevent spam from your domain.",
 			Status: false})

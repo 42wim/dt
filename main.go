@@ -270,7 +270,9 @@ func main() {
 	for _, report := range reports {
 		fmt.Println(report.Type)
 		for _, res := range report.Result {
-			fmt.Println("\t", res.Result)
+			if res.Result != "" {
+				fmt.Println("\t", res.Result)
+			}
 		}
 	}
 
