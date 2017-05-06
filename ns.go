@@ -255,6 +255,14 @@ func (c *NSCheck) Recursive() []ReportResult {
 	return res
 }
 
+func (c *NSCheck) checkSameSubnet() bool {
+	var ips []net.IP
+	for _, ns := range c.NS {
+		ips = append(ips, ns.IP...)
+	}
+	return isSameSubnet(ips...)
+}
+
 func (c *NSCheck) Values() []ReportResult {
 	var results []ReportResult
 	var rrset []dns.RR
@@ -284,13 +292,14 @@ func (c *NSCheck) Values() []ReportResult {
 			}
 		}
 	}
-
+	if !c.checkSameSubnet() {
+		results = append(results, ReportResult{Result: "OK  : Your nameservers are in different subnets.",
+			Status: true})
+	} else {
+		results = append(results, ReportResult{Result: "WARN: Your nameservers are in the same subnet.",
+			Status: false})
+	}
 	return results
-
-	//TODO
-	// check if NS actually response
-	// stealth records
-
 }
 
 func (c *NSCheck) CreateReport(domain string) {

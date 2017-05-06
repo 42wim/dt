@@ -136,3 +136,27 @@ func isRFC1918(ip net.IP) bool {
 	oneSevenTwo := net.IPNet{IP: net.ParseIP("172.16.0.0"), Mask: net.CIDRMask(12, 32)}
 	return ten.Contains(ip) || oneNineTwo.Contains(ip) || oneSevenTwo.Contains(ip)
 }
+
+func isSameSubnet(ips ...net.IP) bool {
+	// ipv4 only for now
+	var ipnets []net.IPNet
+	ipv4 := 0
+	for _, ip := range ips {
+		if ip.To4() != nil {
+			ipv4++
+			ipnets = append(ipnets, net.IPNet{IP: ip, Mask: net.CIDRMask(24, 32)})
+		}
+	}
+	count := 0
+	for _, ipnet := range ipnets {
+		for _, ip := range ips {
+			if ipnet.Contains(ip) {
+				count++
+			}
+		}
+	}
+	if count == ipv4*len(ipnets) {
+		return true
+	}
+	return false
+}
