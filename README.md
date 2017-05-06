@@ -6,7 +6,7 @@ DNS tool that displays information about your domain.
 * common records scanning (use -scan)
 * validate DNSSEC chain (use -debug to see more info)
 * change query speed for scanning (default 10 queries per second)
-* reporting DNSSEC, SOA, glue records
+* diagnostic of your domain (similar to intodns.com)
 * For implemented checks see [#1](https://github.com/42wim/dt/issues/1)
 
 Feedback, issues and PR's are welcome.
@@ -78,13 +78,40 @@ tinnie.arin.net.        |199.212.0.53           |US  |ASN 393225 |ARIN-PFS-IAD -
                         |2001:500:13::c7d4:35   |US  |ASN 53535  |ARIN-PFS-ANYCAST - ARIN Operations, US   |96.854587ms  |1492613104 |valid   |10 hours ago |4 weeks from now
 DNSSEC
          OK: DNSKEY validated. Chain validated
+NS
+         OK  : NS of all nameservers are identical
+         OK  : Multiple nameservers found
+         OK  : Your nameservers are in different subnets.
+         OK  : Nameservers are spread over multiple AS
+         OK  : IPv4 and IPv6 nameservers found.
+         OK  : All nameservers are authoritative.
+         OK  : All nameservers report they are not allowing recursive queries.
+         OK  : Your nameservers are also listed as NS at the parent nameservers
+         OK  : Your parent nameservers are also listed as NS at your nameservers
+         OK  : No CNAMEs found for your NS records
 GLUE
-         FAIL: no glue records found for [192.5.4.1 2001:500:2e::1] in NS of parent net.
-         FAIL: no glue records found for [192.5.4.1 2001:500:13::c7d4:35 2001:502:cbe4::33 2001:500:2e::1 209.112.113.33 69.36.145.33 202.12.28.140 2001:500:7967::2:33 2620:74:19::33 2001:dc0:1:0:4777::140 199.212.0.53 209.112.114.33] in NS of ripe.net.
+         WARN: no glue records found for [2001:500:2e::1 192.5.4.1] in NS of parent net.
+         WARN: no glue records found for [2620:74:19::33 2001:500:2e::1 199.212.0.53 2001:502:cbe4::33 2001:dc0:1:0:4777::140 209.112.113.33 69.36.145.33 202.12.28.140 2001:500:7967::2:33 $09.112.114.33 192.5.4.1 2001:500:13::c7d4:35] in NS of ripe.net.
 SOA
          OK  : SOA of all nameservers are identical
-         FAIL: Serial is not in the recommended format of YYYYMMDDnn.
+         WARN: Serial is not in the recommended format of YYYYMMDDnn.
          OK  : MNAME manus.authdns.ripe.net. is listed at the parent servers.
+         OK  : Your nameservers have public / routable addresses.
+MX
+         OK  : MX of all nameservers are identical
+         OK  : Multiple MX records found
+         OK  : Your MX records have public / routable addresses.
+         OK  : Your MX records resolve to different ips.
+         OK  : No CNAMEs found for your MX records
+         OK  : All MX records have reverse PTR records
+Web
+         OK  : Found a www record
+         OK  : Found a root record
+         OK  : Didn't find a CNAME for the root record
+         OK  : Your www record has a public / routable address.
+Spam
+         WARN: No DMARC records found. Along with DKIM and SPF, DMARC helps prevent spam from your domain.
+         WARN: No SPF records found. Along with DKIM and DMARC, SPF helps prevent spam from your domain.
 ```
 
 ```
