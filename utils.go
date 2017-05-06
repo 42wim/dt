@@ -90,7 +90,7 @@ func queryRRset(q string, qtype uint16, server string, sec bool) ([]dns.RR, time
 func findNS(domain string) ([]NSData, error) {
 	rrset, _, err := queryRRset(domain, dns.TypeNS, resolver, false)
 	if err != nil {
-		return []NSData{}, nil
+		return []NSData{}, err
 	}
 	var nsdatas []NSData
 	for _, rr := range rrset {

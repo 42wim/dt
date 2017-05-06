@@ -42,6 +42,9 @@ func (g *Glue) CreateReport(domain string) {
 	if !res.Status {
 		res.Result = fmt.Sprintf("WARN: no glue records found for %s in NS of parent %s", missed, dns.Fqdn(getParentDomain(domain)))
 	}
+	if res.Error != "" {
+		res.Result = fmt.Sprintf("ERR : CheckParentGlue test failed: %s", res.Error)
+	}
 	rep.Result = append(rep.Result, res)
 	res = ReportResult{Result: fmt.Sprintf("OK  : glue records found for all nameservers in NS record of %s", dns.Fqdn(domain))}
 	res.Status, missed, err = g.CheckSelf(domain)
@@ -50,6 +53,9 @@ func (g *Glue) CreateReport(domain string) {
 	}
 	if err != nil {
 		res.Error = err.Error()
+	}
+	if res.Error != "" {
+		res.Result = fmt.Sprintf("ERR : CheckSelfGlue test failed: %s", res.Error)
 	}
 	rep.Result = append(rep.Result, res)
 	rep.Type = "GLUE"
