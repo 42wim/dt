@@ -29,22 +29,12 @@ func (c *NSCheck) Scan(domain string) {
 		for _, nsip := range ns.IP {
 			data := NSCheckData{Name: ns.Name, IP: nsip.String()}
 			res, err := query(domain, dns.TypeNS, nsip.String(), true)
-			if err != nil {
-				data.Error = fmt.Sprintf("NS check failed on %s: %s", nsip.String(), err)
-				c.NSCheck = append(c.NSCheck, data)
-				break
-			}
-			nsrr := extractRR(res.Msg.Answer, dns.TypeNS)
-			if len(nsrr) == 0 {
-				data.Error = fmt.Sprintf("NSCheck check failed on %s: %s", nsip.String(), "no records found")
-				data.NS = nsrr
+			rrset := extractRRMsg(res.Msg, dns.TypeNS)
+			if !scanerror(&c.Report, "NS scan", ns.Name, nsip.String(), domain, rrset, err) {
+				data.NS = rrset
 				data.Auth = res.Msg.Authoritative
-				c.NSCheck = append(c.NSCheck, data)
-				break
+				data.Recursive = res.Msg.RecursionAvailable
 			}
-			data.NS = nsrr
-			data.Auth = res.Msg.Authoritative
-			data.Recursive = res.Msg.RecursionAvailable
 			c.NSCheck = append(c.NSCheck, data)
 		}
 	}

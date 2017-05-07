@@ -20,34 +20,28 @@ func (c *WebCheck) Scan(domain string) {
 	for _, ns := range c.NS {
 		for _, nsip := range ns.IP {
 			data := WebData{Name: ns.Name, IP: nsip.String()}
-			res, err := query("www."+domain, dns.TypeA, nsip.String(), true)
-			if err != nil {
-				c.Web = append(c.Web, data)
-				break
+			// www
+			rrset, _, err := queryRRset("www."+domain, dns.TypeA, nsip.String(), true)
+			if !scanerror(&c.Report, "WWW ipv4 scan", ns.Name, nsip.String(), domain, rrset, err) {
+				data.A = append(data.A, rrset...)
 			}
-			data.A = extractRR(res.Msg.Answer, dns.TypeA)
-			res, err = query("www."+domain, dns.TypeAAAA, nsip.String(), true)
-			if err != nil {
-				c.Web = append(c.Web, data)
-				break
+			rrset, _, err = queryRRset("www."+domain, dns.TypeAAAA, nsip.String(), true)
+			if !scanerror(&c.Report, "WWW ipv6 scan", ns.Name, nsip.String(), domain, rrset, err) {
+				data.A = append(data.A, rrset...)
 			}
-			data.A = append(data.A, extractRR(res.Msg.Answer, dns.TypeAAAA)...)
-			c.Web = append(c.Web, data)
-
-			res, err = query(domain, dns.TypeA, nsip.String(), true)
-			if err != nil {
-				c.Web = append(c.Web, data)
-				break
+			// apex
+			res, err := query(domain, dns.TypeA, nsip.String(), true)
+			rrset = extractRRMsg(res.Msg, dns.TypeA)
+			if !scanerror(&c.Report, "root ipv4 scan", ns.Name, nsip.String(), domain, rrset, err) {
+				data.Apex = append(data.Apex, rrset...)
+				data.Apex = append(data.Apex, extractRR(res.Msg.Answer, dns.TypeCNAME)...)
 			}
-			data.Apex = extractRR(res.Msg.Answer, dns.TypeA)
-			data.Apex = append(data.Apex, extractRR(res.Msg.Answer, dns.TypeCNAME)...)
 			res, err = query(domain, dns.TypeAAAA, nsip.String(), true)
-			if err != nil {
-				c.Web = append(c.Web, data)
-				break
+			rrset = extractRRMsg(res.Msg, dns.TypeAAAA)
+			if !scanerror(&c.Report, "root ipv6 scan", ns.Name, nsip.String(), domain, rrset, err) {
+				data.Apex = append(data.Apex, rrset...)
+				data.Apex = append(data.Apex, extractRR(res.Msg.Answer, dns.TypeCNAME)...)
 			}
-			data.Apex = append(data.Apex, extractRR(res.Msg.Answer, dns.TypeAAAA)...)
-			data.Apex = append(data.Apex, extractRR(res.Msg.Answer, dns.TypeCNAME)...)
 			c.Web = append(c.Web, data)
 		}
 	}

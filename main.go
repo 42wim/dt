@@ -81,6 +81,7 @@ type ReportResult struct {
 	Status  bool
 	Error   string
 	Records []string
+	Name    string
 }
 
 func outputter() {
@@ -258,7 +259,7 @@ func main() {
 	if chainErr != nil {
 		fmt.Printf("DNSSEC\n\t FAIL: %s\n", chainErr)
 	} else {
-		fmt.Printf("DNSSEC\n\t OK: DNSKEY validated. Chain validated\n")
+		fmt.Printf("DNSSEC\n\t OK  : DNSKEY validated. Chain validated\n")
 	}
 
 	for _, report := range reports {

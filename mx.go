@@ -27,23 +27,15 @@ func (c *MXCheck) Scan(domain string) {
 		for _, nsip := range ns.IP {
 			data := MXData{Name: ns.Name, IP: nsip.String(), MXIP: make(map[string][]net.IP)}
 			mx, _, err := queryRRset(domain, dns.TypeMX, nsip.String(), true)
-			if err != nil {
-				data.Error = fmt.Sprintf("MX check failed on %s: %s", nsip.String(), err)
+			if !scanerror(&c.Report, "MX scan", ns.Name, nsip.String(), domain, mx, err) {
+				data.MX = mx
+				// TODO only lookup once
+				for _, mx := range data.MX {
+					data.MXIP[mx.(*dns.MX).Mx] = append(data.MXIP[mx.(*dns.MX).Mx], getIP(mx.(*dns.MX).Mx, dns.TypeA, resolver)...)
+					data.MXIP[mx.(*dns.MX).Mx] = append(data.MXIP[mx.(*dns.MX).Mx], getIP(mx.(*dns.MX).Mx, dns.TypeAAAA, resolver)...)
+				}
 				c.MX = append(c.MX, data)
-				break
 			}
-			if len(mx) == 0 {
-				data.Error = fmt.Sprintf("MX check failed on %s: %s", nsip.String(), "no records found")
-				c.MX = append(c.MX, data)
-				break
-			}
-			data.MX = mx
-			// TODO only lookup once
-			for _, mx := range data.MX {
-				data.MXIP[mx.(*dns.MX).Mx] = append(data.MXIP[mx.(*dns.MX).Mx], getIP(mx.(*dns.MX).Mx, dns.TypeA, resolver)...)
-				data.MXIP[mx.(*dns.MX).Mx] = append(data.MXIP[mx.(*dns.MX).Mx], getIP(mx.(*dns.MX).Mx, dns.TypeAAAA, resolver)...)
-			}
-			c.MX = append(c.MX, data)
 		}
 	}
 }

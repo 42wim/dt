@@ -26,17 +26,11 @@ func (c *SOACheck) Scan(domain string) {
 		for _, nsip := range ns.IP {
 			data := SOAData{Name: ns.Name, IP: nsip.String()}
 			soa, _, err := queryRRset(domain, dns.TypeSOA, nsip.String(), true)
-			if err != nil {
-				data.Error = fmt.Sprintf("SOA check failed on %s: %s", nsip.String(), err)
-				c.SOA = append(c.SOA, data)
-				break
+			if !scanerror(&c.Report, "SOA scan", ns.Name, nsip.String(), domain, soa, err) {
+				data.SOA = soa[0].(*dns.SOA)
+			} else {
+				data.Error = err.Error()
 			}
-			if len(soa) == 0 {
-				data.Error = fmt.Sprintf("SOA check failed on %s: %s", nsip.String(), "no records found")
-				c.SOA = append(c.SOA, data)
-				break
-			}
-			data.SOA = soa[0].(*dns.SOA)
 			c.SOA = append(c.SOA, data)
 		}
 	}
@@ -124,24 +118,24 @@ func (c *SOACheck) Values() []ReportResult {
 	}
 	if checkSerial(soa.Serial) {
 		results = append(results, ReportResult{Result: "OK  : Serial format appears to be in the recommended format of YYYYMMDDnn.",
-			Status: true, Records: []string{soa.String()}})
+			Status: true, Records: []string{soa.String()}, Name: "Serial"})
 	} else {
 		results = append(results, ReportResult{Result: "WARN: Serial is not in the recommended format of YYYYMMDDnn.",
-			Status: false})
+			Status: false, Name: "Serial"})
 	}
 	if c.checkMname(soa.Ns) {
 		results = append(results, ReportResult{Result: fmt.Sprintf("OK  : MNAME %s is listed at the parent servers.", soa.Ns),
-			Status: true})
+			Status: true, Name: "MNAME"})
 	} else {
 		results = append(results, ReportResult{Result: fmt.Sprintf("FAIL: MNAME %s is not listed at the parent servers.", soa.Ns),
-			Status: false})
+			Status: false, Name: "MNAME"})
 	}
 	if !c.checkRFC1918() {
 		results = append(results, ReportResult{Result: "OK  : Your nameservers have public / routable addresses.",
-			Status: true})
+			Status: true, Name: "RFC1918"})
 	} else {
 		results = append(results, ReportResult{Result: "FAIL: Some of your nameservers have non-routable (RFC1918) addresses.",
-			Status: false})
+			Status: false, Name: "RFC1918"})
 	}
 	return results
 }

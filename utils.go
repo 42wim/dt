@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/42wim/ipisp"
@@ -52,6 +53,13 @@ func extractRR(rrset []dns.RR, qtypes ...uint16) []dns.RR {
 		}
 	}
 	return out
+}
+
+func extractRRMsg(msg *dns.Msg, qtypes ...uint16) []dns.RR {
+	if msg != nil {
+		return extractRR(msg.Answer, qtypes...)
+	}
+	return []dns.RR{}
 }
 
 func query(q string, qtype uint16, server string, sec bool) (Response, error) {
@@ -159,4 +167,26 @@ func isSameSubnet(ips ...net.IP) bool {
 		return true
 	}
 	return false
+}
+
+func scanerror(r *Report, check, ns, ip, domain string, results []dns.RR, err error) bool {
+	fail := false
+	if err != nil {
+		if !strings.Contains(err.Error(), "NXDOMAIN") && !strings.Contains(err.Error(), "no rr for") {
+			r.Result = append(r.Result, ReportResult{Result: fmt.Sprintf("ERR : %s failed on %s (%s): %s", check, ns, ip, err)})
+		}
+		fail = true
+	}
+	if len(results) == 0 && err == nil {
+		//		r.Result = append(r.Result, ReportResult{Result: fmt.Sprintf("ERR : %s failed on %s (%s): %s", check, ns, ip, "no records found")})
+		fail = true
+	}
+	return fail
+}
+
+func rrset2map(rrset []dns.RR, m map[dns.RR]bool) map[dns.RR]bool {
+	for _, rr := range rrset {
+		m[rr] = true
+	}
+	return m
 }

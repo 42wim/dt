@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/miekg/dns"
 	"strings"
 )
@@ -30,18 +29,10 @@ func (c *SpamCheck) ScanDmarc(domain string) {
 		for _, nsip := range ns.IP {
 			data := SpamData{Name: ns.Name, IP: nsip.String()}
 			dmarc, _, err := queryRRset("_dmarc."+domain, dns.TypeTXT, nsip.String(), true)
-			if err != nil {
-				data.Error = fmt.Sprintf("dmarc check failed on %s: %s", nsip.String(), err)
+			if !scanerror(&c.Report, "DMARC scan", ns.Name, nsip.String(), domain, dmarc, err) {
+				data.Dmarc = dmarc
 				c.Spam = append(c.Spam, data)
-				break
 			}
-			if len(dmarc) == 0 {
-				data.Error = fmt.Sprintf("dmarc check failed on %s: %s", nsip.String(), "no records found")
-				c.Spam = append(c.Spam, data)
-				break
-			}
-			data.Dmarc = dmarc
-			c.Spam = append(c.Spam, data)
 		}
 	}
 }
@@ -51,24 +42,16 @@ func (c *SpamCheck) ScanSpf(domain string) {
 		for _, nsip := range ns.IP {
 			data := SpamData{Name: ns.Name, IP: nsip.String()}
 			txt, _, err := queryRRset(domain, dns.TypeTXT, nsip.String(), true)
-			if err != nil {
-				data.Error = fmt.Sprintf("spf check failed on %s: %s", nsip.String(), err)
-				c.Spam = append(c.Spam, data)
-				break
-			}
-			spf := []dns.RR{}
-			for _, rr := range txt {
-				if strings.Contains(rr.String(), "v=spf") {
-					spf = append(spf, rr)
+			if !scanerror(&c.Report, "SPF scan", ns.Name, nsip.String(), domain, txt, err) {
+				spf := []dns.RR{}
+				for _, rr := range txt {
+					if strings.Contains(rr.String(), "v=spf") {
+						spf = append(spf, rr)
+					}
 				}
-			}
-			if len(spf) == 0 {
-				data.Error = fmt.Sprintf("spf check failed on %s: %s", nsip.String(), "no records found")
+				data.Spf = spf
 				c.Spam = append(c.Spam, data)
-				break
 			}
-			data.Spf = spf
-			c.Spam = append(c.Spam, data)
 		}
 	}
 }
