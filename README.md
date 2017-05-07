@@ -6,7 +6,7 @@ DNS tool that displays information about your domain.
 * common records scanning (use -scan)
 * validate DNSSEC chain (use -debug to see more info)
 * change query speed for scanning (default 10 queries per second)
-* diagnostic of your domain (similar to intodns.com)
+* diagnostic of your domain (similar to intodns.com, dnsspy.io)
 * For implemented checks see [#1](https://github.com/42wim/dt/issues/1)
 
 Feedback, issues and PR's are welcome.
