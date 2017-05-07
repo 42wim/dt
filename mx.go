@@ -56,11 +56,13 @@ func (c *MXCheck) Identical() ReportResult {
 	if len(m) > 1 {
 		res.Result = fmt.Sprintf("FAIL: MX not identical\n")
 		res.Status = false
+		res.Name = "Identical"
 		for k, v := range m {
 			res.Result += fmt.Sprintf("\t %s\n\t %s\n", v, k)
 		}
 	} else {
 		res.Result = "OK  : MX of all nameservers are identical"
+		res.Name = "Identical"
 		res.Status = true
 	}
 	return res
@@ -113,7 +115,7 @@ func (c *MXCheck) CheckCNAME() []ReportResult {
 				cname := extractRR(res.Msg.Answer, dns.TypeCNAME)
 				if len(cname) > 0 {
 					rep = append(rep, ReportResult{Result: fmt.Sprintf("FAIL: Your MX (%s) is a CNAME.", mxName),
-						Status: false})
+						Status: false, Name: "CNAME"})
 				}
 				res, err = query(dns.Fqdn(mxName), dns.TypeAAAA, resolver, true)
 				if err != nil {
@@ -122,7 +124,7 @@ func (c *MXCheck) CheckCNAME() []ReportResult {
 				cname = extractRR(res.Msg.Answer, dns.TypeCNAME)
 				if len(cname) > 0 {
 					rep = append(rep, ReportResult{Result: fmt.Sprintf("FAIL: Your MX (%s) is a CNAME.", mxName),
-						Status: false})
+						Status: false, Name: "CNAME"})
 				}
 				m[mxName] = true
 			}
@@ -130,7 +132,7 @@ func (c *MXCheck) CheckCNAME() []ReportResult {
 	}
 	if len(rep) == 0 {
 		rep = append(rep, ReportResult{Result: "OK  : No CNAMEs found for your MX records",
-			Status: true})
+			Status: true, Name: "CNAME"})
 	}
 	return rep
 }
@@ -160,12 +162,12 @@ func (c *MXCheck) CheckReverse() []ReportResult {
 	for name, reverse := range m {
 		if !reverse {
 			rep = append(rep, ReportResult{Result: fmt.Sprintf("WARN: Reverse PTR lookup for MX %s failed.", name),
-				Status: false})
+				Status: false, Name: "Reverse"})
 		}
 	}
 	if len(rep) == 0 {
 		rep = append(rep, ReportResult{Result: "OK  : All MX records have reverse PTR records",
-			Status: true})
+			Status: true, Name: "Reverse"})
 	}
 	return rep
 }
@@ -185,18 +187,18 @@ func (c *MXCheck) Values() []ReportResult {
 			records = append(records, rr.String())
 		}
 		results = append(results, ReportResult{Result: "OK  : Multiple MX records found",
-			Status: true, Records: records})
+			Status: true, Records: records, Name: "Multiple"})
 	} else {
 		results = append(results, ReportResult{Result: fmt.Sprintf("WARN: Only %v MX record found. Extra records increases reliability", len(rrset)),
-			Status: false})
+			Status: false, Name: "Multiple"})
 	}
 
 	if !c.checkRFC1918() {
 		results = append(results, ReportResult{Result: "OK  : Your MX records have public / routable addresses.",
-			Status: true})
+			Status: true, Name: "RFC1918"})
 	} else {
 		results = append(results, ReportResult{Result: "FAIL: Some of your MX records have non-routable (RFC1918) addresses.",
-			Status: false})
+			Status: false, Name: "RFC1918"})
 	}
 
 	m := c.checkDuplicateIP()
@@ -204,18 +206,15 @@ func (c *MXCheck) Values() []ReportResult {
 	for k, v := range m {
 		if len(v) > 1 {
 			results = append(results, ReportResult{Result: fmt.Sprintf("WARN: Same IP %s is used by multiple MX records %v.", k, v),
-				Status: false})
+				Status: false, Name: "DuplicateIP"})
 			duplicate = true
 		}
 	}
 	if !duplicate {
 		results = append(results, ReportResult{Result: "OK  : Your MX records resolve to different ips.",
-			Status: false})
+			Status: false, Name: "DuplicateIP"})
 
 	}
-	//TODO
-	// cname check
-	// multiple subnets
 	return results
 }
 

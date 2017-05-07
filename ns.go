@@ -268,26 +268,26 @@ func (c *NSCheck) Values() []ReportResult {
 			records = append(records, rr.String())
 		}
 		results = append(results, ReportResult{Result: "OK  : Multiple nameservers found",
-			Status: true, Records: records})
+			Status: true, Records: records, Name: "Multiple"})
 	} else {
 		results = append(results, ReportResult{Result: fmt.Sprintf("WARN: Only %v nameserver found. Extra nameservers increases reliability", len(rrset)),
-			Status: false})
+			Status: false, Name: "Multiple"})
 	}
 
 	for _, ns := range c.NSCheck {
 		if ns.NS != nil {
 			if len(ns.CNAME) > 1 {
 				results = append(results, ReportResult{Result: fmt.Sprintf("FAIL: NS %s is a CNAME for %s", ns.Name, ns.CNAME[0].(*dns.CNAME).Target),
-					Status: false})
+					Status: false, Name: "NSCNAME"})
 			}
 		}
 	}
 	if !c.checkSameSubnet() {
 		results = append(results, ReportResult{Result: "OK  : Your nameservers are in different subnets.",
-			Status: true})
+			Status: true, Name: "Subnet"})
 	} else {
 		results = append(results, ReportResult{Result: "WARN: Your nameservers are in the same subnet.",
-			Status: false})
+			Status: false, Name: "Subnet"})
 	}
 	return results
 }

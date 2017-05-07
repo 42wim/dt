@@ -67,27 +67,27 @@ func (c *SpamCheck) Values() []ReportResult {
 	}
 	if len(rrset) > 0 {
 		results = append(results, ReportResult{Result: "OK  : DMARC records found.",
-			Status: true})
+			Status: true, Name: "DMARC"})
 		records := []string{}
 		for _, rr := range rrset {
 			records = append(records, rr.String())
 			if strings.Contains(rr.String(), "p=none") {
 				results = append(results, ReportResult{Result: "WARN: DMARC with monitoring policy found.",
-					Status: false})
+					Status: false, Name: "DMARCPolicy"})
 			}
 			if strings.Contains(rr.String(), "p=quarantine") {
 				results = append(results, ReportResult{Result: "WARN: DMARC with quarantine policy found.",
-					Status: false})
+					Status: false, Name: "DMARCPolicy"})
 			}
 			if strings.Contains(rr.String(), "p=reject") {
 				results = append(results, ReportResult{Result: "OK  : DMARC with reject policy.",
-					Status: false})
+					Status: true, Name: "DMARCPolicy"})
 			}
 		}
 		results = append(results, ReportResult{Status: true, Records: records})
 	} else {
 		results = append(results, ReportResult{Result: "WARN: No DMARC records found. Along with DKIM and SPF, DMARC helps prevent spam from your domain.",
-			Status: false})
+			Status: false, Name: "DMARC"})
 	}
 
 	for _, ns := range c.Spam {
@@ -103,16 +103,16 @@ func (c *SpamCheck) Values() []ReportResult {
 			records = append(records, rr.String())
 		}
 		results = append(results, ReportResult{Result: "OK  : SPF records found.",
-			Status: true, Records: records})
+			Status: true, Records: records, Name: "SPF"})
 	} else {
 		results = append(results, ReportResult{Result: "WARN: No SPF records found. Along with DKIM and DMARC, SPF helps prevent spam from your domain.",
-			Status: false})
+			Status: false, Name: "SPF"})
 	}
 
 	for _, rr := range rrset {
 		if strings.Contains(rr.String(), "-all") || strings.Contains(rr.String(), "~all") {
 			results = append(results, ReportResult{Result: "OK  : SPF records set up restrictively.",
-				Status: true})
+				Status: true, Name: "SPF"})
 		}
 		break
 	}

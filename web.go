@@ -52,13 +52,13 @@ func (c *WebCheck) CheckWww() []ReportResult {
 	for _, web := range c.Web {
 		if len(web.A) > 0 {
 			rep = append(rep, ReportResult{Result: ("OK  : Found a www record"),
-				Status: true})
+				Status: true, Name: "WWW"})
 			break
 		}
 	}
 	if len(rep) == 0 {
 		rep = append(rep, ReportResult{Result: ("WARN: Didn't find a www record"),
-			Status: false})
+			Status: false, Name: "WWW"})
 	}
 	return rep
 }
@@ -88,13 +88,13 @@ func (c *WebCheck) CheckApex() []ReportResult {
 				case *dns.A, *dns.AAAA:
 					if !match {
 						rep = append(rep, ReportResult{Result: ("OK  : Found a root record"),
-							Status: true})
+							Status: true, Name: "Apex"})
 						match = true
 					}
 				case *dns.CNAME:
 					cmatch = true
 					rep = append(rep, ReportResult{Result: ("WARN: Found a CNAME for the root record"),
-						Status: false})
+						Status: false, Name: "ApexCNAME"})
 				}
 				break
 			}
@@ -102,11 +102,11 @@ func (c *WebCheck) CheckApex() []ReportResult {
 	}
 	if len(rep) == 0 {
 		rep = append(rep, ReportResult{Result: ("WARN: Didn't find a root record"),
-			Status: false})
+			Status: false, Name: "Apex"})
 	}
 	if !cmatch {
 		rep = append(rep, ReportResult{Result: ("OK  : Didn't find a CNAME for the root record"),
-			Status: true})
+			Status: true, Name: "ApexCNAME"})
 	}
 	return rep
 }
@@ -115,10 +115,10 @@ func (c *WebCheck) Values() []ReportResult {
 	var results []ReportResult
 	if !c.checkRFC1918() {
 		results = append(results, ReportResult{Result: "OK  : Your www record has a public / routable address.",
-			Status: true})
+			Status: true, Name: "RFC1918"})
 	} else {
 		results = append(results, ReportResult{Result: "FAIL: Your www record has a non-routable (RFC1918) address.",
-			Status: false})
+			Status: false, Name: "RFC1918"})
 	}
 	return results
 }
