@@ -75,12 +75,14 @@ func (c *SOACheck) Identical() ReportResult {
 	if len(m) > 1 {
 		res.Result = fmt.Sprintf("FAIL: SOA not identical\n")
 		res.Status = false
+		res.Name = "Identical"
 		for k, v := range m {
 			res.Result += fmt.Sprintf("\t %s\n\t %s\n", v, k)
 		}
 	} else {
 		res.Result = "OK  : SOA of all nameservers are identical"
 		res.Status = true
+		res.Name = "Identical"
 	}
 	return res
 }
