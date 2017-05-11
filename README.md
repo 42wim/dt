@@ -16,7 +16,6 @@ Feedback, issues and PR's are welcome.
 * JSON API
 * grading 
 * keeping history
-* specify resolver (now 8.8.8.8 is used by default when resolving is needed)
 
 # Installing
 
