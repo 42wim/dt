@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	resolver            = "8.8.8.8"
+	resolver            string
 	wc                  chan NSInfo
 	done                chan struct{}
 	flagScan, flagDebug *bool
@@ -140,6 +140,7 @@ func main() {
 	flagDebug = flag.Bool("debug", false, "enable debug")
 	flagScan = flag.Bool("scan", false, "scan domain for common records")
 	flagQPS = flag.Int("qps", 10, "Queries per seconds (per nameserver)")
+	flag.StringVar(&resolver, "resolver", "8.8.8.8", "use this resolver for initial domain lookup")
 	flag.Parse()
 
 	if len(flag.Args()) == 0 {
@@ -159,6 +160,7 @@ func main() {
 	if *flagDebug {
 		log.Level = logrus.DebugLevel
 	}
+	fmt.Printf("using %s as resolver\n", resolver)
 
 	domain := flag.Arg(0)
 	nsdatas, err := findNS(dns.Fqdn(domain))

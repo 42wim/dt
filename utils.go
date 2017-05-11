@@ -19,13 +19,16 @@ func ipinfo(ip net.IP) (IPInfo, error) {
 	return IPInfo{ip, resp.Country, resp.ASN, resp.Name.Raw}, nil
 }
 
-func getIP(host string, qtype uint16, server string) []net.IP {
+func getIP(host string, qtype uint16, servers ...string) []net.IP {
 	var ips []net.IP
-	rrset, _, err := queryRRset(host, qtype, server, false)
-	if err != nil {
-		return ips
+	for _, server := range servers {
+		rrset, _, err := queryRRset(host, qtype, server, false)
+		if err != nil {
+			continue
+		}
+		return extractIP(rrset)
 	}
-	return extractIP(rrset)
+	return ips
 }
 
 func extractIP(rrset []dns.RR) []net.IP {
