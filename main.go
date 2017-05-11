@@ -18,12 +18,12 @@ import (
 )
 
 var (
-	resolver            string
-	wc                  chan NSInfo
-	done                chan struct{}
-	flagScan, flagDebug *bool
-	flagQPS             *int
-	log                 = logrus.New()
+	resolver                          string
+	wc                                chan NSInfo
+	done                              chan struct{}
+	flagScan, flagDebug, flagShowFail *bool
+	flagQPS                           *int
+	log                               = logrus.New()
 )
 
 type NSInfo struct {
@@ -140,6 +140,7 @@ func main() {
 	flagDebug = flag.Bool("debug", false, "enable debug")
 	flagScan = flag.Bool("scan", false, "scan domain for common records")
 	flagQPS = flag.Int("qps", 10, "Queries per seconds (per nameserver)")
+	flagShowFail = flag.Bool("showfail", false, "Only show checks that fail or warn")
 	flag.StringVar(&resolver, "resolver", "8.8.8.8", "use this resolver for initial domain lookup")
 	flag.Parse()
 
@@ -258,21 +259,35 @@ func main() {
 	}
 	fmt.Println()
 
-	if chainErr != nil {
-		fmt.Printf("DNSSEC\n\t FAIL: %s\n", chainErr)
-	} else {
-		fmt.Printf("DNSSEC\n\t OK  : DNSKEY validated. Chain validated\n")
-	}
+	if !*flagShowFail {
+		if chainErr != nil {
+			fmt.Printf("DNSSEC\n\t FAIL: %s\n", chainErr)
+		} else {
+			fmt.Printf("DNSSEC\n\t OK  : DNSKEY validated. Chain validated\n")
+		}
 
-	for _, report := range reports {
-		fmt.Println(report.Type)
-		for _, res := range report.Result {
-			if res.Result != "" {
-				fmt.Println("\t", res.Result)
+		for _, report := range reports {
+			fmt.Println(report.Type)
+			for _, res := range report.Result {
+				if res.Result != "" {
+					fmt.Println("\t", res.Result)
+				}
+			}
+		}
+	} else {
+		if chainErr != nil {
+			fmt.Printf("DNSSEC\t FAIL: %s\n", chainErr)
+		} else {
+			fmt.Printf("DNSSEC\t OK  : DNSKEY validated. Chain validated\n")
+		}
+		for _, report := range reports {
+			for _, res := range report.Result {
+				if res.Result != "" && res.Status == false {
+					fmt.Println(report.Type, "\t", res.Result)
+				}
 			}
 		}
 	}
-
 	if *flagScan {
 		domainscan(domain)
 	}
