@@ -212,7 +212,7 @@ func (c *MXCheck) Values() []ReportResult {
 	}
 	if !duplicate {
 		results = append(results, ReportResult{Result: "OK  : Your MX records resolve to different ips.",
-			Status: false, Name: "DuplicateIP"})
+			Status: true, Name: "DuplicateIP"})
 
 	}
 	return results
