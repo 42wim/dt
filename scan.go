@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"sort"
 	"time"
@@ -61,7 +62,7 @@ func zoneTransfer(domain, server string) []string {
 	return records
 }
 
-func domainscan(domain string) {
+func domainscan(domain string) []ScanResponse {
 	var ips []net.IP
 	respc := make(chan ScanResponse, 100)
 
@@ -72,6 +73,9 @@ func domainscan(domain string) {
 		}
 	}
 	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+	if *flagJSON {
+		s.Writer = ioutil.Discard
+	}
 
 	scanEntries := 0
 	for _, src := range DSP {
@@ -87,29 +91,37 @@ func domainscan(domain string) {
 			for _, rr := range res {
 				zt = zt + fmt.Sprintln(rr)
 			}
-			fmt.Println(zt)
+			if !*flagJSON {
+				fmt.Println(zt)
+			}
 			// only print one. Further scanning not needed
-			return
+			return []ScanResponse{}
 			// TODO compare hashes
 			//	fmt.Printf("%x\n", Hash("key", []byte(zt)))
 		} else {
-			fmt.Printf("%s ", ip.String())
+			if !*flagJSON {
+				fmt.Printf("%s ", ip.String())
+			}
 		}
 	}
-	fmt.Println(": AXFR denied")
+	if !*flagJSON {
+		fmt.Println(": AXFR denied")
+	}
 
 	s.Suffix = " Scanning... will take approx " + fmt.Sprintf("%#v seconds", scanEntries/(len(servers)*(*flagQPS)))
 	s.Start()
 
-	res, _, _ := queryRRset(dns.Fqdn("*."+domain), dns.TypeA, ips[0].String(), true)
-	// TODO handle * record correctly
-	if len(res) != 0 {
-		s.Stop()
-		fmt.Println()
-		for _, rr := range res {
-			fmt.Println(rr.String())
+	if !*flagJSON {
+		res, _, _ := queryRRset(dns.Fqdn("*."+domain), dns.TypeA, ips[0].String(), true)
+		// TODO handle * record correctly
+		if len(res) != 0 {
+			s.Stop()
+			fmt.Println()
+			for _, rr := range res {
+				fmt.Println(rr.String())
+			}
+			return []ScanResponse{}
 		}
-		return
 	}
 
 	var nsc []chan ScanRequest
@@ -158,13 +170,11 @@ func domainscan(domain string) {
 		}
 	}
 
-	var responses []string
+	var responses []ScanResponse
 	i = 0
 	for resp := range respc {
 		if len(resp.RR) > 0 {
-			for _, rr := range resp.RR {
-				responses = append(responses, rr.String())
-			}
+			responses = append(responses, resp)
 		}
 		if i == scanEntries-1 {
 			break
@@ -174,10 +184,21 @@ func domainscan(domain string) {
 
 	s.Stop()
 
-	sort.Strings(responses)
-	for _, response := range responses {
-		fmt.Println(response)
+	var strResponses []string
+	for _, resp := range responses {
+		if len(resp.RR) > 0 {
+			for _, rr := range resp.RR {
+				strResponses = append(strResponses, rr.String())
+			}
+		}
 	}
+	if !*flagJSON {
+		sort.Strings(strResponses)
+		for _, response := range strResponses {
+			fmt.Println(response)
+		}
+	}
+	return responses
 }
 
 func Hash(tag string, data []byte) []byte {

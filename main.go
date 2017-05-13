@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"sync"
 	"text/tabwriter"
@@ -10,6 +11,7 @@ import (
 
 	"os"
 
+	"encoding/json"
 	"github.com/42wim/ipisp"
 	"github.com/Sirupsen/logrus"
 	"github.com/briandowns/spinner"
@@ -18,12 +20,13 @@ import (
 )
 
 var (
-	resolver                          string
-	wc                                chan NSInfo
-	done                              chan struct{}
-	flagScan, flagDebug, flagShowFail *bool
-	flagQPS                           *int
-	log                               = logrus.New()
+	resolver                                    string
+	wc                                          chan NSInfo
+	done                                        chan struct{}
+	flagScan, flagDebug, flagShowFail, flagJSON *bool
+	flagQPS                                     *int
+	log                                         = logrus.New()
+	domainReport                                DomainReport
 )
 
 type NSInfo struct {
@@ -32,7 +35,7 @@ type NSInfo struct {
 	Serial int64
 	IPInfo
 	DNSSECInfo
-	Msg *dns.Msg
+	Msg *dns.Msg `json:"-"`
 }
 
 type NSData struct {
@@ -84,15 +87,30 @@ type ReportResult struct {
 	Name    string
 }
 
+type DomainReport struct {
+	Name      string
+	NSInfo    []NSInfo
+	Timestamp time.Time
+	Report    []Report
+	Scan      []ScanResponse
+}
+
 func outputter() {
 	const padding = 1
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, padding, ' ', tabwriter.Debug)
+	var w *tabwriter.Writer
+	if *flagJSON {
+		w = tabwriter.NewWriter(ioutil.Discard, 0, 0, padding, ' ', tabwriter.Debug)
+	} else {
+		w = tabwriter.NewWriter(os.Stdout, 0, 0, padding, ' ', tabwriter.Debug)
+	}
+
 	fmt.Fprintf(w, "NS\tIP\tLOC\tASN\tISP\trtt\tSerial\tDNSSEC\tValidFrom\tValidUntil\n")
 	m := make(map[string][]NSInfo)
 	for input := range wc {
 		m[input.Name] = append(m[input.Name], input)
 	}
 	for _, info := range m {
+		domainReport.NSInfo = append(domainReport.NSInfo, info...)
 		i := 0
 		var failed bool
 		for _, ns := range info {
@@ -139,8 +157,9 @@ func writeStats() {
 func main() {
 	flagDebug = flag.Bool("debug", false, "enable debug")
 	flagScan = flag.Bool("scan", false, "scan domain for common records")
-	flagQPS = flag.Int("qps", 10, "Queries per seconds (per nameserver)")
-	flagShowFail = flag.Bool("showfail", false, "Only show checks that fail or warn")
+	flagQPS = flag.Int("qps", 10, "queries per seconds (per nameserver)")
+	flagShowFail = flag.Bool("showfail", false, "only show checks that fail or warn")
+	flagJSON = flag.Bool("json", false, "output in JSON")
 	flag.StringVar(&resolver, "resolver", "8.8.8.8", "use this resolver for initial domain lookup")
 	flag.Parse()
 
@@ -161,9 +180,12 @@ func main() {
 	if *flagDebug {
 		log.Level = logrus.DebugLevel
 	}
-	fmt.Printf("using %s as resolver\n", resolver)
+	if !*flagJSON {
+		fmt.Printf("using %s as resolver\n", resolver)
+	}
 
 	domain := flag.Arg(0)
+	domainReport.Name = domain
 	nsdatas, err := findNS(dns.Fqdn(domain))
 	if len(nsdatas) == 0 {
 		fmt.Println("no nameservers found for", domain)
@@ -175,8 +197,10 @@ func main() {
 	}
 
 	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
-	if !*flagDebug {
-		s.Start()
+	if !*flagJSON {
+		if !*flagDebug {
+			s.Start()
+		}
 	}
 
 	// check dnssec
@@ -234,8 +258,6 @@ func main() {
 		log.Level = logrus.DebugLevel
 	}
 
-	reports := []Report{}
-
 	checkers := []Checker{
 		&NSCheck{NS: nsdatas},
 		&Glue{NS: nsdatas},
@@ -246,49 +268,61 @@ func main() {
 
 	// TODO concurrency
 	for _, checker := range checkers {
-		reports = append(reports, checker.CreateReport(domain))
+		domainReport.Report = append(domainReport.Report, checker.CreateReport(domain))
 	}
 
-	fmt.Println()
-	for _, report := range reports {
-		for _, res := range report.Result {
-			for _, record := range res.Records {
-				fmt.Println(record)
-			}
-		}
-	}
-	fmt.Println()
+	if !*flagJSON {
 
-	if !*flagShowFail {
-		if chainErr != nil {
-			fmt.Printf("DNSSEC\n\t FAIL: %s\n", chainErr)
-		} else {
-			fmt.Printf("DNSSEC\n\t OK  : DNSKEY validated. Chain validated\n")
-		}
-
-		for _, report := range reports {
-			fmt.Println(report.Type)
+		fmt.Println()
+		for _, report := range domainReport.Report {
 			for _, res := range report.Result {
-				if res.Result != "" {
-					fmt.Println("\t", res.Result)
+				for _, record := range res.Records {
+					fmt.Println(record)
 				}
 			}
 		}
-	} else {
-		if chainErr != nil {
-			fmt.Printf("DNSSEC\t FAIL: %s\n", chainErr)
+		fmt.Println()
+
+		if !*flagShowFail {
+			if chainErr != nil {
+				fmt.Printf("DNSSEC\n\t FAIL: %s\n", chainErr)
+			} else {
+				fmt.Printf("DNSSEC\n\t OK  : DNSKEY validated. Chain validated\n")
+			}
+
+			for _, report := range domainReport.Report {
+				fmt.Println(report.Type)
+				for _, res := range report.Result {
+					if res.Result != "" {
+						fmt.Println("\t", res.Result)
+					}
+				}
+			}
 		} else {
-			fmt.Printf("DNSSEC\t OK  : DNSKEY validated. Chain validated\n")
-		}
-		for _, report := range reports {
-			for _, res := range report.Result {
-				if res.Result != "" && res.Status == false {
-					fmt.Println(report.Type, "\t", res.Result)
+			if chainErr != nil {
+				fmt.Printf("DNSSEC\t FAIL: %s\n", chainErr)
+			} else {
+				fmt.Printf("DNSSEC\t OK  : DNSKEY validated. Chain validated\n")
+			}
+			for _, report := range domainReport.Report {
+				for _, res := range report.Result {
+					if res.Result != "" && res.Status == false {
+						fmt.Println(report.Type, "\t", res.Result)
+					}
 				}
 			}
 		}
 	}
+
+	domainReport.Timestamp = time.Now()
 	if *flagScan {
-		domainscan(domain)
+		domainReport.Scan = domainscan(domain)
+	}
+	if *flagJSON {
+		res, err := json.Marshal(domainReport)
+		if err != nil {
+			fmt.Printf("encoding failed: %v\n", err)
+		}
+		fmt.Println(string(res))
 	}
 }
