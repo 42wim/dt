@@ -200,20 +200,24 @@ func removeWild(wild []string, rrset []dns.RR) []dns.RR {
 		return rrset
 	}
 	newset := []dns.RR{}
-	for _, ip := range wild {
-		for _, rr := range rrset {
-			switch rr.(type) {
-			case *dns.A:
-				if rr.(*dns.A).A.String() != ip {
-					newset = append(newset, rr)
+	for _, rr := range rrset {
+		match := false
+		switch rr.(type) {
+		case *dns.A:
+			for _, ip := range wild {
+				if rr.(*dns.A).A.String() == ip {
+					match = true
 				}
-			case *dns.AAAA:
-				if rr.(*dns.AAAA).AAAA.String() != ip {
-					newset = append(newset, rr)
-				}
-			default:
-				newset = append(newset, rr)
 			}
+		case *dns.AAAA:
+			for _, ip := range wild {
+				if rr.(*dns.AAAA).AAAA.String() == ip {
+					match = true
+				}
+			}
+		}
+		if !match {
+			newset = append(newset, rr)
 		}
 	}
 	return newset

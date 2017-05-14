@@ -73,7 +73,7 @@ func domainscan(domain string) []ScanResponse {
 		}
 	}
 	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
-	if *flagJSON {
+	if *flagJSON || *flagDebug {
 		s.Writer = ioutil.Discard
 	}
 
@@ -107,28 +107,26 @@ func domainscan(domain string) []ScanResponse {
 	if !*flagJSON {
 		fmt.Println(": AXFR denied")
 	}
-
 	s.Suffix = " Scanning... will take approx " + fmt.Sprintf("%#v seconds", scanEntries/(len(servers)*(*flagQPS)))
 	s.Start()
 
+	wildcardip := []string{}
 	if !*flagJSON {
 		res, _, _ := queryRRset(dns.Fqdn("*."+domain), dns.TypeA, ips[0].String(), true)
-		// TODO handle * record correctly
 		if len(res) != 0 {
 			s.Stop()
 			fmt.Println()
 			for _, rr := range res {
+				wildcardip = append(wildcardip, rr.(*dns.A).A.String())
 				fmt.Println(rr.String())
 			}
-			return []ScanResponse{}
 		}
 	}
 
 	var nsc []chan ScanRequest
 	for _, server := range servers {
-		c := make(chan ScanRequest, 100)
+		c := make(chan ScanRequest, scanEntries)
 		nsc = append(nsc, c)
-		//fmt.Printf("scanning %s\n", server.IP[0])
 		go func(c chan ScanRequest, ns net.IP) {
 			limiter := time.Tick(time.Millisecond * time.Duration(1000/(*flagQPS)))
 			for request := range c {
@@ -138,24 +136,23 @@ func domainscan(domain string) []ScanResponse {
 				entry := request.Query
 				domain := request.Domain
 				if qtype == dns.TypeA {
+					log.Debugf("asking A for %s to %s", entry+domain, ns.String())
 					res, err := query(dns.Fqdn(entry+domain), dns.TypeA, ns.String(), true)
 					if err != nil {
-						//fmt.Println(err)
 					} else {
 						rrs = extractRR(res.Msg.Answer, dns.TypeA, dns.TypeCNAME)
 					}
-					res2, rtt, err := queryRRset(dns.Fqdn(entry+domain), dns.TypeAAAA, ns.String(), true)
-					if err != nil && len(res2) != 0 {
-						//fmt.Println(err)
-					}
+					log.Debugf("answered A for %s from %s: %#v %#v", entry+domain, ns.String(), rrs, res.Rtt)
+					log.Debugf("asking AAAA for %s to %s", entry+domain, ns.String())
+					res2, rtt, _ := queryRRset(dns.Fqdn(entry+domain), dns.TypeAAAA, ns.String(), true)
+					log.Debugf("answered AAAA for %s from %s: %#v %#v", entry+domain, ns.String(), res2, rtt)
 					rrs = append(rrs, res2...)
 					respc <- ScanResponse{RR: rrs, NS: ns.String(), Rtt: rtt}
 					continue
 				}
-				res, rtt, err := queryRRset(dns.Fqdn(entry+domain), qtype, ns.String(), true)
-				if err != nil && len(res) != 0 {
-					//fmt.Println(err)
-				}
+				log.Debugf("asking qtype %v for %s", qtype, entry+domain)
+				res, rtt, _ := queryRRset(dns.Fqdn(entry+domain), qtype, ns.String(), true)
+				log.Debugf("answered qtype %v for %s from %s: %#v", qtype, entry+domain, ns.String(), res)
 				respc <- ScanResponse{RR: res, NS: ns.String(), Rtt: rtt}
 			}
 		}(c, server.Info[0].IP)
@@ -174,6 +171,8 @@ func domainscan(domain string) []ScanResponse {
 	i = 0
 	for resp := range respc {
 		if len(resp.RR) > 0 {
+			log.Debugf("got valid answer %v of %v: %#v", i, scanEntries-1, resp)
+			resp.RR = removeWild(wildcardip, resp.RR)
 			responses = append(responses, resp)
 		}
 		if i == scanEntries-1 {
