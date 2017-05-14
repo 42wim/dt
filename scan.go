@@ -64,6 +64,7 @@ func zoneTransfer(domain, server string) []string {
 
 func domainscan(domain string) []ScanResponse {
 	var ips []net.IP
+	var strResponses []string
 	respc := make(chan ScanResponse, 100)
 
 	servers, _ := findNS(dns.Fqdn(domain))
@@ -107,18 +108,32 @@ func domainscan(domain string) []ScanResponse {
 	if !*flagJSON {
 		fmt.Println(": AXFR denied")
 	}
-	s.Suffix = " Scanning... will take approx " + fmt.Sprintf("%#v seconds", scanEntries/(len(servers)*(*flagQPS)))
+
+	var avgRtt time.Duration
+	avgRttServers := 0
+	for _, server := range servers {
+		for _, ip := range server.IP {
+			_, rtt, err := queryRRset(domain, dns.TypeSOA, ip.String(), false)
+			if err != nil {
+				continue
+			}
+			avgRtt += rtt
+			avgRttServers++
+		}
+	}
+	avgRtt = avgRtt / time.Duration(avgRttServers)
+
+	s.Suffix = " Scanning... will take approx " + fmt.Sprintf("%#v seconds", float64(scanEntries/(len(servers)*(*flagQPS)))+float64(scanEntries)*avgRtt.Seconds())
+	t := time.Now()
 	s.Start()
 
 	wildcardip := []string{}
 	if !*flagJSON {
 		res, _, _ := queryRRset(dns.Fqdn("*."+domain), dns.TypeA, ips[0].String(), true)
 		if len(res) != 0 {
-			s.Stop()
-			fmt.Println()
 			for _, rr := range res {
 				wildcardip = append(wildcardip, rr.(*dns.A).A.String())
-				fmt.Println(rr.String())
+				strResponses = append(strResponses, rr.String())
 			}
 		}
 	}
@@ -183,7 +198,6 @@ func domainscan(domain string) []ScanResponse {
 
 	s.Stop()
 
-	var strResponses []string
 	for _, resp := range responses {
 		if len(resp.RR) > 0 {
 			for _, rr := range resp.RR {
@@ -196,6 +210,7 @@ func domainscan(domain string) []ScanResponse {
 		for _, response := range strResponses {
 			fmt.Println(response)
 		}
+		fmt.Printf("\nScan took %s\n", time.Since(t))
 	}
 	return responses
 }
