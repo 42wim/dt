@@ -194,3 +194,27 @@ func rrset2map(rrset []dns.RR, m map[dns.RR]bool) map[dns.RR]bool {
 	}
 	return m
 }
+
+func removeWild(wild []string, rrset []dns.RR) []dns.RR {
+	if len(wild) == 0 {
+		return rrset
+	}
+	newset := []dns.RR{}
+	for _, ip := range wild {
+		for _, rr := range rrset {
+			switch rr.(type) {
+			case *dns.A:
+				if rr.(*dns.A).A.String() != ip {
+					newset = append(newset, rr)
+				}
+			case *dns.AAAA:
+				if rr.(*dns.AAAA).AAAA.String() != ip {
+					newset = append(newset, rr)
+				}
+			default:
+				newset = append(newset, rr)
+			}
+		}
+	}
+	return newset
+}
