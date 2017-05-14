@@ -27,6 +27,7 @@ var (
 	flagQPS                                     *int
 	log                                         = logrus.New()
 	domainReport                                DomainReport
+	IPv6Guess                                   bool
 )
 
 type NSInfo struct {
@@ -128,6 +129,10 @@ func outputter() {
 				fmt.Fprintln(w)
 				break
 			}
+			if ns.IPInfo.IP.To4() == nil {
+				IPv6Guess = true
+			}
+
 			if i == 0 {
 				fmt.Fprintf(w, "%s\t%v\t%v\t%v\t%v\t%v\t%v\t", ns.Name, ns.IPInfo.IP.String()+auth, ns.Loc, ns.ASN, fmt.Sprintf("%.40s", ns.ISP), ns.Rtt, ns.Serial)
 			} else {
@@ -256,6 +261,10 @@ func main() {
 	// enable debug again if needed
 	if *flagDebug {
 		log.Level = logrus.DebugLevel
+	}
+
+	if !IPv6Guess {
+		nsdatas = removeIPv6(nsdatas)
 	}
 
 	checkers := []Checker{
