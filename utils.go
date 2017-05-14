@@ -81,6 +81,7 @@ func query(q string, qtype uint16, server string, sec bool) (Response, error) {
 		return resp, err
 	}
 	if in.Rcode != 0 {
+		resp.Rtt = rtt
 		return resp, fmt.Errorf("failure: %s", dns.RcodeToString[in.Rcode])
 	}
 	return Response{Msg: in, Server: server, Rtt: rtt}, nil
@@ -89,11 +90,11 @@ func query(q string, qtype uint16, server string, sec bool) (Response, error) {
 func queryRRset(q string, qtype uint16, server string, sec bool) ([]dns.RR, time.Duration, error) {
 	res, err := query(q, qtype, server, sec)
 	if err != nil {
-		return []dns.RR{}, 0, err
+		return []dns.RR{}, res.Rtt, err
 	}
 	rrset := extractRR(res.Msg.Answer, qtype)
 	if len(rrset) == 0 {
-		return []dns.RR{}, 0, fmt.Errorf("no rr for %#v", qtype)
+		return []dns.RR{}, res.Rtt, fmt.Errorf("no rr for %#v", qtype)
 	}
 	return rrset, res.Rtt, nil
 }
