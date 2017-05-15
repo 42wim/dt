@@ -13,7 +13,6 @@ Feedback, issues and PR's are welcome.
 
 # TODO
 * daemon mode
-* JSON API
 * grading 
 * keeping history
 
@@ -50,11 +49,16 @@ Example:
 Flags:
   -debug
         enable debug
+  -json
+        output in JSON
   -qps int
-        Queries per seconds (per nameserver) (default 10)
+        queries per seconds (per nameserver) (default 10)
+  -resolver string
+        use this resolver for initial domain lookup (default "8.8.8.8")
   -scan
         scan domain for common records
-
+  -showfail
+        only show checks that fail or warn
 ```
 
 # Running
