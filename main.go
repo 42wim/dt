@@ -28,6 +28,7 @@ var (
 	log                                         = logrus.New()
 	domainReport                                DomainReport
 	IPv6Guess                                   bool
+	nsdataCache                                 map[string][]NSData
 )
 
 type NSInfo struct {
@@ -105,6 +106,7 @@ func outputter() {
 		w = tabwriter.NewWriter(os.Stdout, 0, 0, padding, ' ', tabwriter.Debug)
 	}
 
+	fmt.Fprintln(w)
 	fmt.Fprintf(w, "NS\tIP\tLOC\tASN\tISP\trtt\tSerial\tDNSSEC\tValidFrom\tValidUntil\n")
 	m := make(map[string][]NSInfo)
 	for input := range wc {
@@ -188,6 +190,7 @@ func main() {
 	if !*flagJSON {
 		fmt.Printf("using %s as resolver\n", resolver)
 	}
+	nsdataCache = make(map[string][]NSData)
 
 	domain := flag.Arg(0)
 	domainReport.Name = domain
@@ -202,11 +205,10 @@ func main() {
 	}
 
 	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
-	if !*flagJSON {
-		if !*flagDebug {
-			s.Start()
-		}
+	if *flagJSON || *flagDebug {
+		s.Writer = ioutil.Discard
 	}
+	s.Start()
 
 	// check dnssec
 	chainValid, chainErr := validateChain(dns.Fqdn(domain))
@@ -267,6 +269,7 @@ func main() {
 		nsdatas = removeIPv6(nsdatas)
 	}
 
+	s.Start()
 	checkers := []Checker{
 		&NSCheck{NS: nsdatas},
 		&Glue{NS: nsdatas},
@@ -322,6 +325,7 @@ func main() {
 			}
 		}
 	}
+	s.Stop()
 
 	domainReport.Timestamp = time.Now()
 	if *flagScan {

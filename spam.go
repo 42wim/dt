@@ -25,6 +25,8 @@ func (c *SpamCheck) Scan(domain string) {
 }
 
 func (c *SpamCheck) ScanDmarc(domain string) {
+	log.Debugf("Spam: scan")
+	defer log.Debugf("Spam: scan exit")
 	for _, ns := range c.NS {
 		for _, nsip := range ns.IP {
 			data := SpamData{Name: ns.Name, IP: nsip.String()}
@@ -38,6 +40,8 @@ func (c *SpamCheck) ScanDmarc(domain string) {
 }
 
 func (c *SpamCheck) ScanSpf(domain string) {
+	log.Debugf("Spam: scanspf")
+	defer log.Debugf("Spam: scanspf exit")
 	for _, ns := range c.NS {
 		for _, nsip := range ns.IP {
 			data := SpamData{Name: ns.Name, IP: nsip.String()}

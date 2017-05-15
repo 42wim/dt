@@ -11,6 +11,7 @@ import (
 type NSCheck struct {
 	NS      []NSData
 	NSCheck []NSCheckData
+	CacheIP map[string][]net.IP
 	Report
 }
 
@@ -25,6 +26,9 @@ type NSCheckData struct {
 }
 
 func (c *NSCheck) Scan(domain string) {
+	log.Debugf("NS: Scan")
+	defer log.Debugf("NS: Scan exit")
+	c.CacheIP = make(map[string][]net.IP)
 	for _, ns := range c.NS {
 		for _, nsip := range ns.IP {
 			data := NSCheckData{Name: ns.Name, IP: nsip.String()}
@@ -41,6 +45,8 @@ func (c *NSCheck) Scan(domain string) {
 }
 
 func (c *NSCheck) CheckCNAME() []ReportResult {
+	log.Debugf("NS: CheckCNAME")
+	defer log.Debugf("NS: CheckCNAME exit")
 	rep := []ReportResult{}
 	m := make(map[string]bool)
 	for _, ns := range c.NSCheck {
@@ -77,6 +83,8 @@ func (c *NSCheck) CheckCNAME() []ReportResult {
 }
 
 func (c *NSCheck) CheckParent(domain string) []ReportResult {
+	log.Debugf("NS: CheckParent")
+	defer log.Debugf("NS: CheckParent exit")
 	var rep []ReportResult
 	nsdata, err := findNS(getParentDomain(domain))
 	if err != nil {

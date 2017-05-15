@@ -21,6 +21,8 @@ type SOAData struct {
 }
 
 func (c *SOACheck) Scan(domain string) {
+	log.Debugf("SOA: scan")
+	defer log.Debugf("SOA: scan exit")
 	c.Domain = domain
 	for _, ns := range c.NS {
 		for _, nsip := range ns.IP {
@@ -37,6 +39,8 @@ func (c *SOACheck) Scan(domain string) {
 }
 
 func (c *SOACheck) checkMname(mname string) bool {
+	log.Debugf("SOA: mname")
+	defer log.Debugf("SOA: mname exit")
 	nsdata, err := findNS(getParentDomain(c.Domain))
 	if err != nil {
 		return false

@@ -17,6 +17,8 @@ type WebData struct {
 }
 
 func (c *WebCheck) Scan(domain string) {
+	log.Debugf("Web: scan")
+	defer log.Debugf("Web: scan exit")
 	for _, ns := range c.NS {
 		for _, nsip := range ns.IP {
 			data := WebData{Name: ns.Name, IP: nsip.String()}

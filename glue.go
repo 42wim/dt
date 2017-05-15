@@ -116,6 +116,8 @@ func (g *Glue) getSelfGlue(domain string) ([]net.IP, error) {
 }
 
 func getGlueIPs(domain string, server string) ([]net.IP, error) {
+	log.Debugf("GLUE: getGlueIPs")
+	defer log.Debugf("GLUE: getGlueIPs exit")
 	var ips []net.IP
 	res, err := query(domain, dns.TypeNS, server, true)
 	if err != nil {

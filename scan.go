@@ -151,21 +151,18 @@ func domainscan(domain string) []ScanResponse {
 				entry := request.Query
 				domain := request.Domain
 				if qtype == dns.TypeA {
-					log.Debugf("asking A for %s to %s", entry+domain, ns.String())
 					res, err := query(dns.Fqdn(entry+domain), dns.TypeA, ns.String(), true)
 					if err != nil {
 					} else {
 						rrs = extractRR(res.Msg.Answer, dns.TypeA, dns.TypeCNAME)
 					}
 					log.Debugf("answered A for %s from %s: %#v %#v", entry+domain, ns.String(), rrs, res.Rtt)
-					log.Debugf("asking AAAA for %s to %s", entry+domain, ns.String())
 					res2, rtt, _ := queryRRset(dns.Fqdn(entry+domain), dns.TypeAAAA, ns.String(), true)
 					log.Debugf("answered AAAA for %s from %s: %#v %#v", entry+domain, ns.String(), res2, rtt)
 					rrs = append(rrs, res2...)
 					respc <- ScanResponse{RR: rrs, NS: ns.String(), Rtt: rtt}
 					continue
 				}
-				log.Debugf("asking qtype %v for %s", qtype, entry+domain)
 				res, rtt, _ := queryRRset(dns.Fqdn(entry+domain), qtype, ns.String(), true)
 				log.Debugf("answered qtype %v for %s from %s: %#v", qtype, entry+domain, ns.String(), res)
 				respc <- ScanResponse{RR: res, NS: ns.String(), Rtt: rtt}

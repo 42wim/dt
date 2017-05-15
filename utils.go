@@ -75,6 +75,7 @@ func query(q string, qtype uint16, server string, sec bool) (Response, error) {
 		m.SetEdns0(4096, true)
 	}
 	var resp Response
+	log.Debugf("Asking %s about %s (%s)", server, q, dns.TypeToString[qtype])
 	m.Question[0] = dns.Question{dns.Fqdn(q), qtype, dns.ClassINET}
 	in, rtt, err := c.Exchange(m, net.JoinHostPort(server, "53"))
 	if err != nil {
@@ -100,6 +101,9 @@ func queryRRset(q string, qtype uint16, server string, sec bool) ([]dns.RR, time
 }
 
 func findNS(domain string) ([]NSData, error) {
+	if nsdatas, ok := nsdataCache[domain]; ok {
+		return nsdatas, nil
+	}
 	rrset, _, err := queryRRset(domain, dns.TypeNS, resolver, false)
 	if err != nil {
 		return []NSData{}, err
@@ -123,6 +127,7 @@ func findNS(domain string) ([]NSData, error) {
 	if len(nsdatas) == 0 {
 		return nsdatas, fmt.Errorf("no NS found")
 	}
+	nsdataCache[domain] = nsdatas
 	return nsdatas, nil
 }
 
