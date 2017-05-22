@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
+	"os"
 	"sort"
 	"time"
 
@@ -74,6 +75,7 @@ func domainscan(domain string) []ScanResponse {
 		}
 	}
 	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+	s.Writer = os.Stderr
 	if *flagJSON || *flagDebug {
 		s.Writer = ioutil.Discard
 	}
