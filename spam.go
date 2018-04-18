@@ -114,10 +114,15 @@ func (c *SpamCheck) Values() []ReportResult {
 	}
 
 	for _, rr := range rrset {
-		if strings.Contains(rr.String(), "-all") || strings.Contains(rr.String(), "~all") {
+		if strings.Contains(rr.String(), "-all") {
 			results = append(results, ReportResult{Result: "OK  : SPF records set up restrictively.",
 				Status: true, Name: "SPF"})
 		}
+		if strings.Contains(rr.String(), "~all") {
+            results = append(results, ReportResult{Result: "WARN: SPF record set to softfail.",
+				Status: true, Name: "SPF"})
+		}
+
 		break
 	}
 
