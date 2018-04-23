@@ -122,6 +122,10 @@ func (c *SpamCheck) Values() []ReportResult {
             results = append(results, ReportResult{Result: "WARN: SPF record set to softfail.",
 				Status: true, Name: "SPF"})
 		}
+        if strings.Contains(rr.String(), " ptr ") || strings.Contains(rr.String(), " ptr:") {
+            results = append(results, ReportResult{Result: "WARN: SPF record uses ptr mechanism (see RFC7208 5.5).",
+				Status: true, Name: "SPF"})
+		}
 
 		break
 	}
