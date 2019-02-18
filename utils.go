@@ -34,11 +34,11 @@ func getIP(host string, qtype uint16, servers ...string) []net.IP {
 func extractIP(rrset []dns.RR) []net.IP {
 	var ips []net.IP
 	for _, rr := range rrset {
-		switch rr.(type) {
+		switch rr := rr.(type) {
 		case *dns.A:
-			ips = append(ips, rr.(*dns.A).A)
+			ips = append(ips, rr.A)
 		case *dns.AAAA:
-			ips = append(ips, rr.(*dns.AAAA).AAAA)
+			ips = append(ips, rr.AAAA)
 		}
 	}
 	return ips
@@ -76,7 +76,11 @@ func query(q string, qtype uint16, server string, sec bool) (Response, error) {
 	}
 	var resp Response
 	log.Debugf("Asking %s about %s (%s)", server, q, dns.TypeToString[qtype])
-	m.Question[0] = dns.Question{dns.Fqdn(q), qtype, dns.ClassINET}
+	m.Question[0] = dns.Question{
+		Name:   dns.Fqdn(q),
+		Qtype:  qtype,
+		Qclass: dns.ClassINET,
+	}
 	in, rtt, err := c.Exchange(m, net.JoinHostPort(server, "53"))
 	if err != nil {
 		return resp, err
@@ -172,10 +176,7 @@ func isSameSubnet(ips ...net.IP) bool {
 			}
 		}
 	}
-	if count == ipv4*len(ipnets) {
-		return true
-	}
-	return false
+	return count == ipv4*len(ipnets)
 }
 
 func scanerror(r *Report, check, ns, ip, domain string, results []dns.RR, err error) bool {
@@ -193,13 +194,6 @@ func scanerror(r *Report, check, ns, ip, domain string, results []dns.RR, err er
 	return fail
 }
 
-func rrset2map(rrset []dns.RR, m map[dns.RR]bool) map[dns.RR]bool {
-	for _, rr := range rrset {
-		m[rr] = true
-	}
-	return m
-}
-
 func removeWild(wild []string, rrset []dns.RR) []dns.RR {
 	if len(wild) == 0 {
 		return rrset
@@ -207,16 +201,16 @@ func removeWild(wild []string, rrset []dns.RR) []dns.RR {
 	newset := []dns.RR{}
 	for _, rr := range rrset {
 		match := false
-		switch rr.(type) {
+		switch rr := rr.(type) {
 		case *dns.A:
 			for _, ip := range wild {
-				if rr.(*dns.A).A.String() == ip {
+				if rr.A.String() == ip {
 					match = true
 				}
 			}
 		case *dns.AAAA:
 			for _, ip := range wild {
-				if rr.(*dns.AAAA).AAAA.String() == ip {
+				if rr.AAAA.String() == ip {
 					match = true
 				}
 			}

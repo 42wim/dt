@@ -86,7 +86,7 @@ func (g *Glue) Compare(parentGlue []net.IP) (bool, []string) {
 		m[ip.String()] = true
 	}
 	for k, v := range m {
-		if v == false {
+		if !v {
 			ips = append(ips, k)
 		}
 	}

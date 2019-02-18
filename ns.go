@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
-	"github.com/miekg/dns"
 	"net"
 	"sort"
 	"strings"
+
+	"github.com/miekg/dns"
 )
 
 type NSCheck struct {
@@ -128,7 +129,7 @@ loop:
 	// find the records that are sent by parent NS but arent in the domain NS
 	missing = []string{}
 	for k, v := range m {
-		if v == true {
+		if v {
 			missing = append(missing, k)
 		}
 	}

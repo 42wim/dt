@@ -69,7 +69,7 @@ func validateChain(domain string) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		if valid == false {
+		if !valid {
 			return false, fmt.Errorf("validateChain failed. Run with -debug for more information")
 		}
 		parent := getParentDomain(domain)
@@ -78,7 +78,6 @@ func validateChain(domain string) (bool, error) {
 		}
 		domain = parent
 	}
-	return true, nil
 }
 
 func validateDomain(domain string) (bool, error) {
@@ -94,6 +93,7 @@ func validateDomain(domain string) (bool, error) {
 	// get auth servers
 	nsdata, err := findNS(domain)
 	if err != nil {
+		log.Debugf("validateDomain() error: %#v\n")
 	}
 	for _, ns := range nsdata {
 		for _, nsip := range ns.IP {
@@ -122,7 +122,7 @@ func validateDomain(domain string) (bool, error) {
 				return false, fmt.Errorf("Validation failed. No DNSKEY found for %s on %s", domain, nsip.String())
 			}
 
-			valid, info, err := validateDNSKEY(res.Msg.Answer)
+			valid, info, _ := validateDNSKEY(res.Msg.Answer)
 			if valid {
 				log.Debugf("RRSIG validated (%s -> %s)", time.Unix(info.Start, 0), time.Unix(info.End, 0))
 			} else {
@@ -137,6 +137,7 @@ func validateDomain(domain string) (bool, error) {
 	log.Debugf("Finding NS of parent: %s", dns.Fqdn(getParentDomain(domain)))
 	nsdata, err = findNS(getParentDomain(domain))
 	if err != nil {
+		log.Debugf("ValidateDomain() error: %#v", err)
 	}
 
 	// asking parent about DS

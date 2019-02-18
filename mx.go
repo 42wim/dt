@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
-	"github.com/miekg/dns"
 	"net"
 	"sort"
 	"strings"
+
+	"github.com/miekg/dns"
 )
 
 type MXCheck struct {

@@ -1,8 +1,6 @@
 package main
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -45,7 +43,11 @@ func zoneTransfer(domain, server string) []string {
 	var records []string
 	t := new(dns.Transfer)
 	req := prepMsg()
-	req.Question[0] = dns.Question{dns.Fqdn(domain), dns.TypeAXFR, dns.ClassINET}
+	req.Question[0] = dns.Question{
+		Name:   dns.Fqdn(domain),
+		Qtype:  dns.TypeAXFR,
+		Qclass: dns.ClassINET,
+	}
 	q, err := t.In(req, net.JoinHostPort(server, "53"))
 	if err != nil {
 		return records
@@ -82,17 +84,17 @@ func domainscan(domain string) []ScanResponse {
 
 	scanEntries := 0
 	for _, src := range DSP {
-		scanEntries = scanEntries + len(src.Entries)
+		scanEntries += len(src.Entries)
 	}
 
-	*flagQPS = *flagQPS * len(servers)
+	*flagQPS *= len(servers)
 
 	for _, ip := range ips {
 		res := zoneTransfer(domain, ip.String())
 		if len(res) > 0 {
 			zt := ""
 			for _, rr := range res {
-				zt = zt + fmt.Sprintln(rr)
+				zt += fmt.Sprintln(rr)
 			}
 			if !*flagJSON {
 				fmt.Println(zt)
@@ -101,10 +103,8 @@ func domainscan(domain string) []ScanResponse {
 			return []ScanResponse{}
 			// TODO compare hashes
 			//	fmt.Printf("%x\n", Hash("key", []byte(zt)))
-		} else {
-			if !*flagJSON {
-				fmt.Printf("%s ", ip.String())
-			}
+		} else if !*flagJSON {
+			fmt.Printf("%s ", ip.String())
 		}
 	}
 	if !*flagJSON {
@@ -123,7 +123,7 @@ func domainscan(domain string) []ScanResponse {
 			avgRttServers++
 		}
 	}
-	avgRtt = avgRtt / time.Duration(avgRttServers)
+	avgRtt /= time.Duration(avgRttServers)
 
 	s.Suffix = " Scanning... will take approx " + fmt.Sprintf("%#v seconds", float64(scanEntries/(len(servers)*(*flagQPS)))+float64(scanEntries)*avgRtt.Seconds())
 	t := time.Now()
@@ -212,10 +212,4 @@ func domainscan(domain string) []ScanResponse {
 		fmt.Printf("\nScan took %s\n", time.Since(t))
 	}
 	return responses
-}
-
-func Hash(tag string, data []byte) []byte {
-	h := hmac.New(sha256.New, []byte(tag))
-	h.Write(data)
-	return h.Sum(nil)
 }

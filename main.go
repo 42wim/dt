@@ -1,17 +1,16 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"net"
+	"os"
 	"sync"
 	"text/tabwriter"
 	"time"
 
-	"os"
-
-	"encoding/json"
 	"github.com/ammario/ipisp"
 	"github.com/briandowns/spinner"
 	"github.com/dustin/go-humanize"
@@ -63,11 +62,6 @@ type DNSSECInfo struct {
 type KeyInfo struct {
 	Start int64
 	End   int64
-}
-
-type DomainStat struct {
-	Domain string
-	NS     []NSInfo
 }
 
 type Response struct {
@@ -155,10 +149,6 @@ func outputter() {
 	}
 	w.Flush()
 	done <- struct{}{}
-}
-
-func writeStats() {
-
 }
 
 func main() {
@@ -319,7 +309,7 @@ func main() {
 			}
 			for _, report := range domainReport.Report {
 				for _, res := range report.Result {
-					if res.Result != "" && res.Status == false {
+					if res.Result != "" && !res.Status {
 						fmt.Println(report.Type, "\t", res.Result)
 					}
 				}

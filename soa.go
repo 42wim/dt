@@ -2,8 +2,9 @@ package main
 
 import (
 	"fmt"
-	"github.com/miekg/dns"
 	"time"
+
+	"github.com/miekg/dns"
 )
 
 type SOACheck struct {
@@ -97,10 +98,7 @@ func checkSerial(serial uint32) bool {
 		return false
 	}
 	_, err := time.Parse("20060102", serialstr[:len(serialstr)-2])
-	if err != nil {
-		return false
-	}
-	return true
+	return err != nil
 }
 
 func (c *SOACheck) checkRFC1918() bool {
