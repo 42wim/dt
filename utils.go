@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/42wim/ipisp"
+	"github.com/ammario/ipisp"
 	"github.com/miekg/dns"
 )
 

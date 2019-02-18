@@ -12,11 +12,11 @@ import (
 	"os"
 
 	"encoding/json"
-	"github.com/42wim/ipisp"
-	"github.com/Sirupsen/logrus"
+	"github.com/ammario/ipisp"
 	"github.com/briandowns/spinner"
 	"github.com/dustin/go-humanize"
 	"github.com/miekg/dns"
+	"github.com/sirupsen/logrus"
 )
 
 var (
