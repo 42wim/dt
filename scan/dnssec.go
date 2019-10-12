@@ -204,6 +204,9 @@ func (s *Scan) validateDomain(domain string) (bool, error) {
 			if err != nil {
 				return false, err
 			}
+			if res.Msg == nil {
+				continue
+			}
 			valid, info, _ := validateDNSKEY(res.Msg.Answer)
 			if valid {
 				log.Debugf("RRSIG validated (%s -> %s)", time.Unix(info.Start, 0), time.Unix(info.End, 0))
