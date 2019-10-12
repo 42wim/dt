@@ -163,11 +163,10 @@ var colorAttributeMap = map[string]color.Attribute{
 
 // validColor will make sure the given color is actually allowed
 func validColor(c string) bool {
-	valid := false
 	if validColors[c] {
-		valid = true
+		return true
 	}
-	return valid
+	return false
 }
 
 // Spinner struct to hold the provided options
@@ -183,11 +182,12 @@ type Spinner struct {
 	Writer     io.Writer                     // to make testing better, exported so users have access
 	active     bool                          // active holds the state of the spinner
 	stopChan   chan struct{}                 // stopChan is a channel used to stop the indicator
+	HideCursor bool                          // hideCursor determines if the cursor is visible
 }
 
 // New provides a pointer to an instance of Spinner with the supplied options
 func New(cs []string, d time.Duration, options ...Option) *Spinner {
-	s:= &Spinner{
+	s := &Spinner{
 		Delay:    d,
 		chars:    cs,
 		color:    color.New(color.FgWhite).SprintFunc(),
@@ -200,33 +200,49 @@ func New(cs []string, d time.Duration, options ...Option) *Spinner {
 	for _, option := range options {
 		option(s)
 	}
-
 	return s
 }
 
+// Option is a function that takes a spinner and applies
+// a given configuration
 type Option func(*Spinner)
 
+// Options contains fields to configure the spinner
 type Options struct {
-	Color string
-	Suffix string
-	FinalMSG string
+	Color      string
+	Suffix     string
+	FinalMSG   string
+	HideCursor bool
 }
 
+// WithColor adds the given color to the spinner
 func WithColor(color string) Option {
 	return func(s *Spinner) {
 		s.Color(color)
 	}
 }
 
+// WithSuffix adds the given string to the spinner
+// as the suffix
 func WithSuffix(suffix string) Option {
 	return func(s *Spinner) {
 		s.Suffix = suffix
 	}
 }
 
+// WithFinalMSG adds the given string ot the spinner
+// as the final message to be written
 func WithFinalMSG(finalMsg string) Option {
 	return func(s *Spinner) {
 		s.FinalMSG = finalMsg
+	}
+}
+
+// WithHiddenCursor hides the cursor
+// if hideCursor = true given
+func WithHiddenCursor(hideCursor bool) Option {
+	return func(s *Spinner) {
+		s.HideCursor = hideCursor
 	}
 }
 
@@ -241,6 +257,10 @@ func (s *Spinner) Start() {
 	if s.active {
 		s.lock.Unlock()
 		return
+	}
+	if s.HideCursor && runtime.GOOS != "windows" {
+		// hides the cursor
+		fmt.Print("\033[?25l")
 	}
 	s.active = true
 	s.lock.Unlock()
@@ -283,6 +303,10 @@ func (s *Spinner) Stop() {
 	defer s.lock.Unlock()
 	if s.active {
 		s.active = false
+		if s.HideCursor && runtime.GOOS != "windows" {
+			// makes the cursor visible
+			fmt.Print("\033[?25h")
+		}
 		s.erase()
 		if s.FinalMSG != "" {
 			fmt.Fprintf(s.Writer, s.FinalMSG)
@@ -308,7 +332,6 @@ func (s *Spinner) Reverse() {
 
 // Color will set the struct field for the given color to be used
 func (s *Spinner) Color(colors ...string) error {
-
 	colorAttributes := make([]color.Attribute, len(colors))
 
 	// Verify colours are valid and place the appropriate attribute in the array
@@ -316,7 +339,6 @@ func (s *Spinner) Color(colors ...string) error {
 		if !validColor(c) {
 			return errInvalidColor
 		}
-
 		colorAttributes[index] = colorAttributeMap[c]
 	}
 
@@ -347,25 +369,32 @@ func (s *Spinner) UpdateCharSet(cs []string) {
 func (s *Spinner) erase() {
 	n := utf8.RuneCountInString(s.lastOutput)
 	if runtime.GOOS == "windows" {
-		clearString := "\r"
+		var clearString string
 		for i := 0; i < n; i++ {
 			clearString += " "
 		}
+		clearString += "\r"
 		fmt.Fprintf(s.Writer, clearString)
+		s.lastOutput = ""
 		return
 	}
 	del, _ := hex.DecodeString("7f")
-	for _, c := range []string{
-		"\b",
-		string(del),
-		"\b",
-		"\033[K", // for macOS Terminal
-	} {
+	for _, c := range []string{"\b", string(del), "\b", "\033[K"} { // "\033[K" for macOS Terminal
 		for i := 0; i < n; i++ {
 			fmt.Fprintf(s.Writer, c)
 		}
 	}
 	s.lastOutput = ""
+}
+
+// Lock allows for manual control to lock the spinner
+func (s *Spinner) Lock() {
+	s.lock.Lock()
+}
+
+// Unlock allows for manual control to unlock the spinner
+func (s *Spinner) Unlock() {
+	s.lock.Unlock()
 }
 
 // GenerateNumberSequence will generate a slice of integers at the
