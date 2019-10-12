@@ -1,4 +1,4 @@
-package main
+package check
 
 import (
 	"fmt"
@@ -6,14 +6,18 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/42wim/dt/scan"
+	"github.com/42wim/dt/structs"
+	"github.com/labstack/gommon/log"
 	"github.com/miekg/dns"
 )
 
 type NSCheck struct {
-	NS      []NSData
+	NS      []structs.NSData
 	NSCheck []NSCheckData
 	CacheIP map[string][]net.IP
 	Report
+	s *scan.Scan
 }
 
 type NSCheckData struct {
@@ -26,6 +30,14 @@ type NSCheckData struct {
 	Recursive bool
 }
 
+func NewNS(s *scan.Scan, ns []structs.NSData) *NSCheck {
+	c := &NSCheck{
+		s:  s,
+		NS: ns,
+	}
+	return c
+}
+
 func (c *NSCheck) Scan(domain string) {
 	log.Debugf("NS: Scan")
 	defer log.Debugf("NS: Scan exit")
@@ -33,9 +45,9 @@ func (c *NSCheck) Scan(domain string) {
 	for _, ns := range c.NS {
 		for _, nsip := range ns.IP {
 			data := NSCheckData{Name: ns.Name, IP: nsip.String()}
-			res, err := query(domain, dns.TypeNS, nsip.String(), true)
+			res, err := scan.Query(domain, dns.TypeNS, nsip.String(), true)
 			rrset := extractRRMsg(res.Msg, dns.TypeNS)
-			if !scanerror(&c.Report, "NS scan", ns.Name, nsip.String(), domain, rrset, err) {
+			if !c.Report.scanError("NS scan", ns.Name, nsip.String(), domain, rrset, err) {
 				data.NS = rrset
 				data.Auth = res.Msg.Authoritative
 				data.Recursive = res.Msg.RecursionAvailable
@@ -56,7 +68,7 @@ func (c *NSCheck) CheckCNAME() []ReportResult {
 			break
 		}
 		// asking recursor for now
-		res, err := query(dns.Fqdn(ns.Name), dns.TypeA, resolver, true)
+		res, err := scan.Query(dns.Fqdn(ns.Name), dns.TypeA, c.s.Resolver(), true)
 		if err != nil {
 			break
 		}
@@ -65,7 +77,7 @@ func (c *NSCheck) CheckCNAME() []ReportResult {
 			rep = append(rep, ReportResult{Result: fmt.Sprintf("FAIL: Your nameserver (%s) is a CNAME.", ns.Name),
 				Status: false, Name: "CNAME"})
 		}
-		res, err = query(dns.Fqdn(ns.Name), dns.TypeAAAA, resolver, true)
+		res, err = scan.Query(dns.Fqdn(ns.Name), dns.TypeAAAA, c.s.Resolver(), true)
 		if err != nil {
 			break
 		}
@@ -87,7 +99,7 @@ func (c *NSCheck) CheckParent(domain string) []ReportResult {
 	log.Debugf("NS: CheckParent")
 	defer log.Debugf("NS: CheckParent exit")
 	var rep []ReportResult
-	nsdata, err := findNS(getParentDomain(domain))
+	nsdata, err := c.s.FindNS(getParentDomain(domain))
 	if err != nil {
 		return []ReportResult{}
 	}
@@ -95,7 +107,7 @@ func (c *NSCheck) CheckParent(domain string) []ReportResult {
 loop:
 	for _, ns := range nsdata {
 		for _, nsip := range ns.IP {
-			res, err := query(dns.Fqdn(domain), dns.TypeNS, nsip.String(), true)
+			res, err := scan.Query(dns.Fqdn(domain), dns.TypeNS, nsip.String(), true)
 			if err != nil {
 				break
 			}
@@ -116,7 +128,6 @@ loop:
 		} else {
 			m[ns.Name] = false
 		}
-
 	}
 	if len(missing) > 0 {
 		rep = append(rep, ReportResult{Result: fmt.Sprintf("FAIL: The following nameservers are not listed as NS at the parent nameservers: %s", missing),

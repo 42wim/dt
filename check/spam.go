@@ -1,15 +1,19 @@
-package main
+package check
 
 import (
 	"strings"
 
+	"github.com/42wim/dt/scan"
+	"github.com/42wim/dt/structs"
+	"github.com/labstack/gommon/log"
 	"github.com/miekg/dns"
 )
 
 type SpamCheck struct {
-	NS   []NSData
+	NS   []structs.NSData
 	Spam []SpamData
 	Report
+	s *scan.Scan
 }
 
 type SpamData struct {
@@ -18,6 +22,14 @@ type SpamData struct {
 	Dmarc []dns.RR
 	Spf   []dns.RR
 	Error string
+}
+
+func NewSpam(s *scan.Scan, ns []structs.NSData) *SpamCheck {
+	c := &SpamCheck{
+		s:  s,
+		NS: ns,
+	}
+	return c
 }
 
 func (c *SpamCheck) Scan(domain string) {
@@ -31,8 +43,8 @@ func (c *SpamCheck) ScanDmarc(domain string) {
 	for _, ns := range c.NS {
 		for _, nsip := range ns.IP {
 			data := SpamData{Name: ns.Name, IP: nsip.String()}
-			dmarc, _, err := queryRRset("_dmarc."+domain, dns.TypeTXT, nsip.String(), true)
-			if !scanerror(&c.Report, "DMARC scan", ns.Name, nsip.String(), domain, dmarc, err) {
+			dmarc, _, err := scan.QueryRRset("_dmarc."+domain, dns.TypeTXT, nsip.String(), true)
+			if !c.Report.scanError("DMARC scan", ns.Name, nsip.String(), domain, dmarc, err) {
 				data.Dmarc = dmarc
 				c.Spam = append(c.Spam, data)
 			}
@@ -46,8 +58,8 @@ func (c *SpamCheck) ScanSpf(domain string) {
 	for _, ns := range c.NS {
 		for _, nsip := range ns.IP {
 			data := SpamData{Name: ns.Name, IP: nsip.String()}
-			txt, _, err := queryRRset(domain, dns.TypeTXT, nsip.String(), true)
-			if !scanerror(&c.Report, "SPF scan", ns.Name, nsip.String(), domain, txt, err) {
+			txt, _, err := scan.QueryRRset(domain, dns.TypeTXT, nsip.String(), true)
+			if !c.Report.scanError("SPF scan", ns.Name, nsip.String(), domain, txt, err) {
 				spf := []dns.RR{}
 				for _, rr := range txt {
 					if strings.Contains(rr.String(), "v=spf") {
@@ -127,7 +139,6 @@ func (c *SpamCheck) Values() []ReportResult {
 			results = append(results, ReportResult{Result: "WARN: SPF record uses ptr mechanism (see RFC7208 5.5).",
 				Status: true, Name: "SPF"})
 		}
-
 	}
 
 	// TODO

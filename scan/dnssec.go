@@ -1,19 +1,24 @@
-package main
+package scan
 
 import (
 	"fmt"
 	"time"
 
+	"github.com/42wim/dt/structs"
 	"github.com/miekg/dns"
 )
 
-func validateDNSKEY(keys []dns.RR) (bool, KeyInfo, error) {
+func validateDNSKEY(keys []dns.RR) (bool, structs.KeyInfo, error) {
 	return validateRRSIG(keys, keys)
 }
 
-func validateRRSIG(keys []dns.RR, rrset []dns.RR) (bool, KeyInfo, error) {
+func (s *Scan) ValidateRRSIG(keys []dns.RR, rrset []dns.RR) (bool, structs.KeyInfo, error) {
+	return validateRRSIG(keys, rrset)
+}
+
+func validateRRSIG(keys []dns.RR, rrset []dns.RR) (bool, structs.KeyInfo, error) {
 	if len(rrset) == 0 {
-		return false, KeyInfo{}, nil
+		return false, structs.KeyInfo{}, nil
 	}
 	var sig *dns.RRSIG
 	var cleanset []dns.RR
@@ -37,13 +42,16 @@ func validateRRSIG(keys []dns.RR, rrset []dns.RR) (bool, KeyInfo, error) {
 			ti, te := explicitValid(sig)
 			if sig.ValidityPeriod(time.Now()) {
 				log.Debugf("Validation succeeded")
-				return true, KeyInfo{ti, te}, nil
+				return true, structs.KeyInfo{
+					Start: ti,
+					End:   te,
+				}, nil
 			}
-			//	return false, KeyInfo{ti, te}, nil
+			//	return false, structs.KeyInfo{ti, te}, nil
 		}
 		log.Debugf("Validation failed")
 	}
-	return false, KeyInfo{}, nil
+	return false, structs.KeyInfo{}, nil
 }
 
 func explicitValid(rr *dns.RRSIG) (int64, int64) {
@@ -62,10 +70,14 @@ func explicitValid(rr *dns.RRSIG) (int64, int64) {
 	return ti, te
 }
 
-func validateChain(domain string) (bool, error) {
+func (s *Scan) ValidateChain(domain string) (bool, error) {
+	return s.validateChain(domain)
+}
+
+func (s *Scan) validateChain(domain string) (bool, error) {
 	for {
 		log.Debugf("Validating %s", domain)
-		valid, err := validateDomain(domain)
+		valid, err := s.validateDomain(domain)
 		if err != nil {
 			return false, err
 		}
@@ -80,62 +92,36 @@ func validateChain(domain string) (bool, error) {
 	}
 }
 
-func validateDomain(domain string) (bool, error) {
-	// TODO concurrency
-	// get DNSKEY domain.
-	// validate RRSIG on DNSKEY
-	// get DS from parent.
-	// create digest from DS based on digest from child
-	// compare digest (parent) with child (RRSig digest)
-
-	keyMap := make(map[uint16]*dns.DNSKEY)
-
-	// get auth servers
-	nsdata, err := findNS(domain)
+func (s *Scan) LookupDNSKEY(domain string, nsip string, keyMap map[uint16]*dns.DNSKEY) (structs.Response, error) {
+	found := false
+	res, err := query(domain, dns.TypeDNSKEY, nsip, true)
 	if err != nil {
-		log.Debugf("validateDomain() error: %#v\n")
+		log.Debugf("error %s", err)
+		return res, nil
 	}
-	for _, ns := range nsdata {
-		for _, nsip := range ns.IP {
-			found := false
-			log.Debugf("Asking NS %s (%s) DNSKEY of %s", ns.Name, nsip.String(), domain)
-			res, err := query(domain, dns.TypeDNSKEY, nsip.String(), true)
-			if err != nil {
-				log.Debugf("error %s", err)
-				break
-			}
-			// map DNSKEYs
-			for _, a := range res.Msg.Answer {
-				switch a.(type) {
-				case *dns.DNSKEY:
-					found = true
-					key := a.(*dns.DNSKEY)
-					if exist, ok := keyMap[key.KeyTag()]; ok {
-						if key.PublicKey != exist.PublicKey {
-							return false, fmt.Errorf("Validation failed. DNSKEY with same keytag differ")
-						}
-					}
-					keyMap[key.KeyTag()] = key
+	// map DNSKEYs
+	for _, a := range res.Msg.Answer {
+		switch key := a.(type) {
+		case *dns.DNSKEY:
+			found = true
+			if exist, ok := keyMap[key.KeyTag()]; ok {
+				if key.PublicKey != exist.PublicKey {
+					return res, fmt.Errorf("validation failed. DNSKEY with same keytag differ")
 				}
 			}
-			if !found {
-				return false, fmt.Errorf("Validation failed. No DNSKEY found for %s on %s", domain, nsip.String())
-			}
-
-			valid, info, _ := validateDNSKEY(res.Msg.Answer)
-			if valid {
-				log.Debugf("RRSIG validated (%s -> %s)", time.Unix(info.Start, 0), time.Unix(info.End, 0))
-			} else {
-				log.Debugf("RRSIG not validated")
-				return false, fmt.Errorf("Validation failed. RRSIG on DNSKEY could not be validated by any DNSKEY for %s", domain)
-			}
+			keyMap[key.KeyTag()] = key
 		}
 	}
-	log.Debugf("Found %v valid DNSKEY for %s", len(keyMap), domain)
+	if !found {
+		return res, fmt.Errorf("validation failed. No DNSKEY found for %s on %s", domain, nsip)
+	}
+	return res, nil
+}
 
+func (s *Scan) validateParentDS(domain string, keyMap map[uint16]*dns.DNSKEY) (bool, error) {
 	// get auth servers of parent
 	log.Debugf("Finding NS of parent: %s", dns.Fqdn(getParentDomain(domain)))
-	nsdata, err = findNS(getParentDomain(domain))
+	nsdata, err := s.FindNS(getParentDomain(domain))
 	if err != nil {
 		log.Debugf("ValidateDomain() error: %#v", err)
 	}
@@ -147,7 +133,7 @@ func validateDomain(domain string) (bool, error) {
 			log.Debugf("Asking parent %s (%s) DS of %s", ns.Name, nsip.String(), domain)
 			res, err := query(domain, dns.TypeDS, nsip.String(), true)
 			if err == nil && len(res.Msg.Answer) == 0 {
-				return false, fmt.Errorf("Validation failed. No DS records found for %s on %v\n", domain, nsip.String())
+				return false, fmt.Errorf("validation failed. No DS records found for %s on %v", domain, nsip.String())
 			}
 			if err != nil {
 				log.Debugf("error %s", err)
@@ -155,9 +141,8 @@ func validateDomain(domain string) (bool, error) {
 			}
 			// look for all parent DS and compare digests
 			for _, a := range res.Msg.Answer {
-				switch a.(type) {
+				switch parentDS := a.(type) {
 				case *dns.DS:
-					parentDS := a.(*dns.DS)
 					// does the child has a DNSKEY with the found KeyTag ?
 					key := keyMap[parentDS.KeyTag]
 					if key == nil {
@@ -191,7 +176,52 @@ func validateDomain(domain string) (bool, error) {
 	}
 	if !foundKeyTag {
 		log.Debugf("Validation failed. No DNSKEY in %s found that matches DS in %s", domain, getParentDomain(domain))
-		return false, fmt.Errorf("Validation failed. No DNSKEY in %s found that matches DS in %s", domain, getParentDomain(domain))
+		return false, fmt.Errorf("validation failed. No DNSKEY in %s found that matches DS in %s", domain, getParentDomain(domain))
 	}
 	return true, nil
+}
+
+func (s *Scan) validateDomain(domain string) (bool, error) {
+	// TODO concurrency
+	// get DNSKEY domain.
+	// validate RRSIG on DNSKEY
+	// get DS from parent.
+	// create digest from DS based on digest from child
+	// compare digest (parent) with child (RRSig digest)
+
+	keyMap := make(map[uint16]*dns.DNSKEY)
+
+	// get auth servers
+	nsdata, err := s.FindNS(domain)
+	if err != nil {
+		log.Debugf("validateDomain() error: %#v", err)
+	}
+	for _, ns := range nsdata {
+		for _, nsip := range ns.IP {
+			var res structs.Response
+			log.Debugf("Asking NS %s (%s) DNSKEY of %s", ns.Name, nsip.String(), domain)
+			res, err = s.LookupDNSKEY(domain, nsip.String(), keyMap)
+			if err != nil {
+				return false, err
+			}
+			valid, info, _ := validateDNSKEY(res.Msg.Answer)
+			if valid {
+				log.Debugf("RRSIG validated (%s -> %s)", time.Unix(info.Start, 0), time.Unix(info.End, 0))
+			} else {
+				log.Debugf("RRSIG not validated")
+				return false, fmt.Errorf("validation failed. RRSIG on DNSKEY could not be validated by any DNSKEY for %s", domain)
+			}
+		}
+	}
+	log.Debugf("Found %v valid DNSKEY for %s", len(keyMap), domain)
+
+	// get auth servers of parent
+	log.Debugf("Finding NS of parent: %s", dns.Fqdn(getParentDomain(domain)))
+	_, err = s.FindNS(getParentDomain(domain))
+	if err != nil {
+		log.Debugf("ValidateDomain() error: %#v", err)
+	}
+
+	// asking parent about DS
+	return s.validateParentDS(domain, keyMap)
 }

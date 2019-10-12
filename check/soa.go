@@ -1,17 +1,21 @@
-package main
+package check
 
 import (
 	"fmt"
 	"time"
 
+	"github.com/42wim/dt/scan"
+	"github.com/42wim/dt/structs"
+	"github.com/labstack/gommon/log"
 	"github.com/miekg/dns"
 )
 
 type SOACheck struct {
-	NS     []NSData
+	NS     []structs.NSData
 	SOA    []SOAData
 	Domain string
 	Report
+	s *scan.Scan
 }
 
 type SOAData struct {
@@ -21,6 +25,14 @@ type SOAData struct {
 	Error string
 }
 
+func NewSOA(s *scan.Scan, ns []structs.NSData) *SOACheck {
+	c := &SOACheck{
+		s:  s,
+		NS: ns,
+	}
+	return c
+}
+
 func (c *SOACheck) Scan(domain string) {
 	log.Debugf("SOA: scan")
 	defer log.Debugf("SOA: scan exit")
@@ -28,8 +40,8 @@ func (c *SOACheck) Scan(domain string) {
 	for _, ns := range c.NS {
 		for _, nsip := range ns.IP {
 			data := SOAData{Name: ns.Name, IP: nsip.String()}
-			soa, _, err := queryRRset(domain, dns.TypeSOA, nsip.String(), true)
-			if !scanerror(&c.Report, "SOA scan", ns.Name, nsip.String(), domain, soa, err) {
+			soa, _, err := scan.QueryRRset(domain, dns.TypeSOA, nsip.String(), true)
+			if !c.Report.scanError("SOA scan", ns.Name, nsip.String(), domain, soa, err) {
 				data.SOA = soa[0].(*dns.SOA)
 			} else {
 				data.Error = err.Error()
@@ -42,7 +54,7 @@ func (c *SOACheck) Scan(domain string) {
 func (c *SOACheck) checkMname(mname string) bool {
 	log.Debugf("SOA: mname")
 	defer log.Debugf("SOA: mname exit")
-	nsdata, err := findNS(getParentDomain(c.Domain))
+	nsdata, err := c.s.FindNS(getParentDomain(c.Domain))
 	if err != nil {
 		return false
 	}
@@ -50,7 +62,7 @@ func (c *SOACheck) checkMname(mname string) bool {
 loop:
 	for _, ns := range nsdata {
 		for _, nsip := range ns.IP {
-			res, err := query(dns.Fqdn(c.Domain), dns.TypeNS, nsip.String(), true)
+			res, err := scan.Query(dns.Fqdn(c.Domain), dns.TypeNS, nsip.String(), true)
 			if err != nil {
 				break
 			}
@@ -66,7 +78,6 @@ loop:
 		}
 	}
 	return false
-
 }
 
 func (c *SOACheck) Identical() ReportResult {

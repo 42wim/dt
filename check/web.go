@@ -1,11 +1,17 @@
-package main
+package check
 
-import "github.com/miekg/dns"
+import (
+	"github.com/42wim/dt/scan"
+	"github.com/42wim/dt/structs"
+	"github.com/labstack/gommon/log"
+	"github.com/miekg/dns"
+)
 
 type WebCheck struct {
-	NS  []NSData
+	NS  []structs.NSData
 	Web []WebData
 	Report
+	s *scan.Scan
 }
 
 type WebData struct {
@@ -16,6 +22,14 @@ type WebData struct {
 	Error string
 }
 
+func NewWeb(s *scan.Scan, ns []structs.NSData) *WebCheck {
+	c := &WebCheck{
+		s:  s,
+		NS: ns,
+	}
+	return c
+}
+
 func (c *WebCheck) Scan(domain string) {
 	log.Debugf("Web: scan")
 	defer log.Debugf("Web: scan exit")
@@ -23,24 +37,24 @@ func (c *WebCheck) Scan(domain string) {
 		for _, nsip := range ns.IP {
 			data := WebData{Name: ns.Name, IP: nsip.String()}
 			// www
-			rrset, _, err := queryRRset("www."+domain, dns.TypeA, nsip.String(), true)
-			if !scanerror(&c.Report, "WWW ipv4 scan", ns.Name, nsip.String(), domain, rrset, err) {
+			rrset, _, err := scan.QueryRRset("www."+domain, dns.TypeA, nsip.String(), true)
+			if !c.Report.scanError("WWW ipv4 scan", ns.Name, nsip.String(), domain, rrset, err) {
 				data.A = append(data.A, rrset...)
 			}
-			rrset, _, err = queryRRset("www."+domain, dns.TypeAAAA, nsip.String(), true)
-			if !scanerror(&c.Report, "WWW ipv6 scan", ns.Name, nsip.String(), domain, rrset, err) {
+			rrset, _, err = scan.QueryRRset("www."+domain, dns.TypeAAAA, nsip.String(), true)
+			if !c.Report.scanError("WWW ipv6 scan", ns.Name, nsip.String(), domain, rrset, err) {
 				data.A = append(data.A, rrset...)
 			}
 			// apex
-			res, err := query(domain, dns.TypeA, nsip.String(), true)
+			res, err := scan.Query(domain, dns.TypeA, nsip.String(), true)
 			rrset = extractRRMsg(res.Msg, dns.TypeA)
-			if !scanerror(&c.Report, "root ipv4 scan", ns.Name, nsip.String(), domain, rrset, err) {
+			if !c.Report.scanError("root ipv4 scan", ns.Name, nsip.String(), domain, rrset, err) {
 				data.Apex = append(data.Apex, rrset...)
 				data.Apex = append(data.Apex, extractRR(res.Msg.Answer, dns.TypeCNAME)...)
 			}
-			res, err = query(domain, dns.TypeAAAA, nsip.String(), true)
+			res, err = scan.Query(domain, dns.TypeAAAA, nsip.String(), true)
 			rrset = extractRRMsg(res.Msg, dns.TypeAAAA)
-			if !scanerror(&c.Report, "root ipv6 scan", ns.Name, nsip.String(), domain, rrset, err) {
+			if !c.Report.scanError("root ipv6 scan", ns.Name, nsip.String(), domain, rrset, err) {
 				data.Apex = append(data.Apex, rrset...)
 				data.Apex = append(data.Apex, extractRR(res.Msg.Answer, dns.TypeCNAME)...)
 			}

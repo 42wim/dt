@@ -5,13 +5,14 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"net"
 	"os"
 	"sync"
 	"text/tabwriter"
 	"time"
 
-	"github.com/ammario/ipisp"
+	"github.com/42wim/dt/check"
+	"github.com/42wim/dt/scan"
+	"github.com/42wim/dt/structs"
 	"github.com/briandowns/spinner"
 	"github.com/dustin/go-humanize"
 	"github.com/miekg/dns"
@@ -20,76 +21,14 @@ import (
 
 var (
 	resolver                                    string
-	wc                                          chan NSInfo
+	wc                                          chan structs.NSInfo
 	done                                        chan struct{}
 	flagScan, flagDebug, flagShowFail, flagJSON *bool
 	flagQPS                                     *int
 	log                                         = logrus.New()
-	domainReport                                DomainReport
+	domainReport                                check.DomainReport
 	IPv6Guess                                   bool
-	nsdataCache                                 map[string][]NSData
 )
-
-type NSInfo struct {
-	Name   string
-	Rtt    time.Duration
-	Serial int64
-	IPInfo
-	DNSSECInfo
-	Msg *dns.Msg `json:"-"`
-}
-
-type NSData struct {
-	Name string
-	Info []NSInfo
-	IP   []net.IP
-}
-
-type IPInfo struct {
-	IP  net.IP
-	Loc string
-	ASN ipisp.ASN
-	ISP string
-}
-
-type DNSSECInfo struct {
-	Valid      bool
-	ChainValid bool
-	Disabled   bool
-	KeyInfo
-}
-
-type KeyInfo struct {
-	Start int64
-	End   int64
-}
-
-type Response struct {
-	Msg    *dns.Msg
-	Server string
-	Rtt    time.Duration
-}
-
-type Report struct {
-	Type   string
-	Result []ReportResult
-}
-
-type ReportResult struct {
-	Result  string
-	Status  bool
-	Error   string
-	Records []string
-	Name    string
-}
-
-type DomainReport struct {
-	Name      string
-	NSInfo    []NSInfo
-	Timestamp time.Time
-	Report    []Report
-	Scan      []ScanResponse
-}
 
 func outputter() {
 	const padding = 1
@@ -102,7 +41,7 @@ func outputter() {
 
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "NS\tIP\tLOC\tASN\tISP\trtt\tSerial\tDNSSEC\tValidFrom\tValidUntil\n")
-	m := make(map[string][]NSInfo)
+	m := make(map[string][]structs.NSInfo)
 	for input := range wc {
 		m[input.Name] = append(m[input.Name], input)
 	}
@@ -180,11 +119,15 @@ func main() {
 	if !*flagJSON {
 		fmt.Printf("using %s as resolver\n", resolver)
 	}
-	nsdataCache = make(map[string][]NSData)
 
 	domain := flag.Arg(0)
 	domainReport.Name = domain
-	nsdatas, err := findNS(dns.Fqdn(domain))
+	s := scan.New(&scan.Config{
+		JSON:  flagJSON,
+		Debug: flagDebug,
+		QPS:   flagQPS,
+	}, resolver)
+	nsdatas, err := s.FindNS(dns.Fqdn(domain))
 	if len(nsdatas) == 0 {
 		fmt.Println("no nameservers found for", domain)
 		return
@@ -194,17 +137,17 @@ func main() {
 		return
 	}
 
-	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
-	s.Writer = os.Stderr
+	sp := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+	sp.Writer = os.Stderr
 	if *flagJSON || *flagDebug {
-		s.Writer = ioutil.Discard
+		sp.Writer = ioutil.Discard
 	}
-	s.Start()
+	sp.Start()
 
 	// check dnssec
-	chainValid, chainErr := validateChain(dns.Fqdn(domain))
+	chainValid, chainErr := s.ValidateChain(dns.Fqdn(domain))
 
-	wc = make(chan NSInfo)
+	wc = make(chan structs.NSInfo)
 	done = make(chan struct{})
 	var wg sync.WaitGroup
 	go outputter()
@@ -216,25 +159,25 @@ func main() {
 
 	for _, nsdata := range nsdatas {
 		wg.Add(1)
-		go func(nsinfos []NSInfo) {
+		go func(nsinfos []structs.NSInfo) {
 			for _, nsinfo := range nsinfos {
-				var newnsinfo NSInfo
+				var newnsinfo structs.NSInfo
 				ip := nsinfo.IP
 				info, _ := ipinfo(ip)
 				newnsinfo.IPInfo = info
 				newnsinfo.Name = nsinfo.Name
 
-				soa, rtt, err := queryRRset(domain, dns.TypeSOA, ip.String(), false)
+				soa, rtt, err := scan.QueryRRset(domain, dns.TypeSOA, ip.String(), false)
 				if err == nil {
 					newnsinfo.Rtt = rtt
 					newnsinfo.Serial = int64(soa[0].(*dns.SOA).Serial)
 				}
 
-				keys, _, _ := queryRRset(domain, dns.TypeDNSKEY, ip.String(), true)
-				res, err := query(domain, dns.TypeNS, ip.String(), true)
+				keys, _, _ := scan.QueryRRset(domain, dns.TypeDNSKEY, ip.String(), true)
+				res, err := scan.Query(domain, dns.TypeNS, ip.String(), true)
 				if err == nil {
-					valid, keyinfo, _ := validateRRSIG(keys, res.Msg.Answer)
-					newnsinfo.DNSSECInfo = DNSSECInfo{Valid: valid, KeyInfo: keyinfo, ChainValid: chainValid}
+					valid, keyinfo, _ := s.ValidateRRSIG(keys, res.Msg.Answer)
+					newnsinfo.DNSSECInfo = structs.DNSSECInfo{Valid: valid, KeyInfo: keyinfo, ChainValid: chainValid}
 					if keyinfo.Start == 0 && len(keys) == 0 {
 						newnsinfo.Disabled = true
 					}
@@ -248,7 +191,7 @@ func main() {
 
 	wg.Wait()
 	close(wc)
-	s.Stop()
+	sp.Stop()
 	<-done
 
 	// enable debug again if needed
@@ -260,14 +203,15 @@ func main() {
 		nsdatas = removeIPv6(nsdatas)
 	}
 
-	s.Start()
-	checkers := []Checker{
-		&NSCheck{NS: nsdatas},
-		&Glue{NS: nsdatas},
-		&SOACheck{NS: nsdatas},
-		&MXCheck{NS: nsdatas},
-		&WebCheck{NS: nsdatas},
-		&SpamCheck{NS: nsdatas}}
+	sp.Start()
+	checkers := []check.Checker{
+		check.NewNS(s, nsdatas),
+		check.NewGlue(s, nsdatas),
+		check.NewSOA(s, nsdatas),
+		check.NewMX(s, nsdatas),
+		check.NewWeb(s, nsdatas),
+		check.NewSpam(s, nsdatas),
+	}
 
 	// TODO concurrency
 	for _, checker := range checkers {
@@ -275,7 +219,6 @@ func main() {
 	}
 
 	if !*flagJSON {
-
 		fmt.Println()
 		for _, report := range domainReport.Report {
 			for _, res := range report.Result {
@@ -316,11 +259,20 @@ func main() {
 			}
 		}
 	}
-	s.Stop()
+	sp.Stop()
 
 	domainReport.Timestamp = time.Now()
 	if *flagScan {
-		domainReport.Scan = domainscan(domain)
+		sp := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+		sp.Writer = os.Stderr
+		if *flagJSON || *flagDebug {
+			sp.Writer = ioutil.Discard
+		}
+		//        sp.Suffix = " Scanning... will take approx " + fmt.Sprintf("%#v seconds", float64(scanEntries/(len(servers)*(*s.QPS)))+float64(scanEntries)*avgRtt.Seconds())
+		//t := time.Now()
+		sp.Start()
+		domainReport.Scan = s.DomainScan(domain)
+		sp.Stop()
 	}
 	if *flagJSON {
 		res, err := json.Marshal(domainReport)

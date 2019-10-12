@@ -1,4 +1,4 @@
-package main
+package check
 
 import (
 	"fmt"
@@ -6,15 +6,19 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/42wim/dt/scan"
+	"github.com/42wim/dt/structs"
+	"github.com/labstack/gommon/log"
 	"github.com/miekg/dns"
 )
 
 type MXCheck struct {
-	NS     []NSData
+	NS     []structs.NSData
 	MX     []MXData
 	MXIP   map[string][]net.IP // cache mx ip records
 	MXIPRR map[string][]dns.RR // cache raw A/AAAA responses so we can extract CNAMEs if needed
 	Report
+	s *scan.Scan
 }
 
 type MXData struct {
@@ -22,6 +26,14 @@ type MXData struct {
 	IP    string
 	MX    []dns.RR
 	Error string
+}
+
+func NewMX(s *scan.Scan, ns []structs.NSData) *MXCheck {
+	c := &MXCheck{
+		s:  s,
+		NS: ns,
+	}
+	return c
 }
 
 func (c *MXCheck) Scan(domain string) {
@@ -32,19 +44,19 @@ func (c *MXCheck) Scan(domain string) {
 	for _, ns := range c.NS {
 		for _, nsip := range ns.IP {
 			data := MXData{Name: ns.Name, IP: nsip.String()}
-			mx, _, err := queryRRset(domain, dns.TypeMX, nsip.String(), true)
-			if !scanerror(&c.Report, "MX scan", ns.Name, nsip.String(), domain, mx, err) {
+			mx, _, err := scan.QueryRRset(domain, dns.TypeMX, nsip.String(), true)
+			if !c.Report.scanError("MX scan", ns.Name, nsip.String(), domain, mx, err) {
 				data.MX = mx
 				for _, mxRR := range data.MX {
 					mx := mxRR.(*dns.MX).Mx
 					if _, ok := c.MXIP[mx]; !ok {
-						res, err := query(dns.Fqdn(mx), dns.TypeA, resolver, true)
+						res, err := scan.Query(dns.Fqdn(mx), dns.TypeA, c.s.Resolver(), true)
 						if err != nil {
 							break
 						}
 						c.MXIP[mx] = append(c.MXIP[mx], extractIP(res.Msg.Answer)...)
 						c.MXIPRR[mx] = append(c.MXIPRR[mx], res.Msg.Answer...)
-						res, err = query(dns.Fqdn(mx), dns.TypeAAAA, resolver, true)
+						res, err = scan.Query(dns.Fqdn(mx), dns.TypeAAAA, c.s.Resolver(), true)
 						if err != nil {
 							break
 						}
@@ -140,7 +152,7 @@ func (c *MXCheck) CheckReverse() []ReportResult {
 		for name, ips := range c.MXIP {
 			for _, ip := range ips {
 				rev, _ := dns.ReverseAddr(ip.String())
-				res, _, err := queryRRset(rev, dns.TypePTR, resolver, true)
+				res, _, err := scan.QueryRRset(rev, dns.TypePTR, c.s.Resolver(), true)
 				if err != nil {
 					break
 				}
@@ -206,7 +218,6 @@ func (c *MXCheck) Values() []ReportResult {
 	if !duplicate {
 		results = append(results, ReportResult{Result: "OK  : Your MX records resolve to different ips.",
 			Status: true, Name: "DuplicateIP"})
-
 	}
 	return results
 }

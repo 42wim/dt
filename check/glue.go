@@ -1,15 +1,27 @@
-package main
+package check
 
 import (
 	"fmt"
 	"net"
 
+	"github.com/42wim/dt/scan"
+	"github.com/42wim/dt/structs"
+	"github.com/labstack/gommon/log"
 	"github.com/miekg/dns"
 )
 
 type Glue struct {
-	NS []NSData
+	NS []structs.NSData
 	Report
+	s *scan.Scan
+}
+
+func NewGlue(s *scan.Scan, ns []structs.NSData) *Glue {
+	g := &Glue{
+		s:  s,
+		NS: ns,
+	}
+	return g
 }
 
 func (g *Glue) Scan(domain string) {
@@ -17,7 +29,7 @@ func (g *Glue) Scan(domain string) {
 }
 
 func (g *Glue) CheckParent(domain string) (bool, []string, error) {
-	parentGlue, err := getParentGlue(domain)
+	parentGlue, err := g.getParentGlue(domain)
 	if err != nil {
 		return false, []string{}, err
 	}
@@ -96,30 +108,30 @@ func (g *Glue) Compare(parentGlue []net.IP) (bool, []string) {
 	return false, ips
 }
 
-func getParentGlue(domain string) ([]net.IP, error) {
+func (g *Glue) getParentGlue(domain string) ([]net.IP, error) {
 	// TODO ask every parent
 	log.Debugf("Finding NS of parent: %s", dns.Fqdn(getParentDomain(domain)))
 	var ips []net.IP
-	nsdata, err := findNS(getParentDomain(domain))
+	nsdata, err := g.s.FindNS(getParentDomain(domain))
 	if err != nil {
 		return ips, err
 	}
 	// asking parent about NS
 	log.Debugf("Asking parent %s (%s) NS of %s", nsdata[0].Info[0].IP.String(), getParentDomain(domain), domain)
-	return getGlueIPs(domain, nsdata[0].Info[0].IP.String())
+	return g.getGlueIPs(domain, nsdata[0].Info[0].IP.String())
 }
 
 func (g *Glue) getSelfGlue(domain string) ([]net.IP, error) {
 	// TODO all NS
 	log.Debugf("Asking self %s (%s) NS of %s", g.NS[0].IP[0].String(), domain, domain)
-	return getGlueIPs(domain, g.NS[0].IP[0].String())
+	return g.getGlueIPs(domain, g.NS[0].IP[0].String())
 }
 
-func getGlueIPs(domain string, server string) ([]net.IP, error) {
+func (g *Glue) getGlueIPs(domain string, server string) ([]net.IP, error) {
 	log.Debugf("GLUE: getGlueIPs")
 	defer log.Debugf("GLUE: getGlueIPs exit")
 	var ips []net.IP
-	res, err := query(domain, dns.TypeNS, server, true)
+	res, err := g.s.Query(domain, dns.TypeNS, server, true)
 	if err != nil {
 		return ips, err
 	}
