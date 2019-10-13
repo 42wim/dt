@@ -74,7 +74,8 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	createNSHeader(s, domain, nsdatas)
+	var domainReport check.DomainReport
+	createNSHeader(s, domain, nsdatas, &domainReport)
 
 	// enable debug again if needed
 	if *flagDebug {
@@ -84,7 +85,7 @@ func main() {
 	if !IPv6Guess {
 		nsdatas = removeIPv6(nsdatas)
 	}
-	doDomainReport(s, domain, nsdatas)
+	doDomainReport(s, domain, nsdatas, &domainReport)
 }
 
 func execCheckers(s *scan.Scan, domain string, nsdatas []structs.NSData, domainReport *check.DomainReport) {
@@ -104,8 +105,7 @@ func execCheckers(s *scan.Scan, domain string, nsdatas []structs.NSData, domainR
 	}
 }
 
-func doDomainReport(s *scan.Scan, domain string, nsdatas []structs.NSData) {
-	var domainReport check.DomainReport
+func doDomainReport(s *scan.Scan, domain string, nsdatas []structs.NSData, domainReport *check.DomainReport) {
 	domainReport.Name = domain
 	sp := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
 	sp.Writer = os.Stderr
@@ -114,7 +114,7 @@ func doDomainReport(s *scan.Scan, domain string, nsdatas []structs.NSData) {
 	}
 
 	sp.Start()
-	execCheckers(s, domain, nsdatas, &domainReport)
+	execCheckers(s, domain, nsdatas, domainReport)
 
 	if !*flagJSON {
 		printDomainReport(domainReport, *flagShowFail)
@@ -143,7 +143,7 @@ func doDomainReport(s *scan.Scan, domain string, nsdatas []structs.NSData) {
 	}
 }
 
-func createNSHeader(s *scan.Scan, domain string, nsdatas []structs.NSData) {
+func createNSHeader(s *scan.Scan, domain string, nsdatas []structs.NSData, domainReport *check.DomainReport) {
 	sp := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
 	sp.Writer = os.Stderr
 	if *flagJSON || *flagDebug {
@@ -170,6 +170,7 @@ func createNSHeader(s *scan.Scan, domain string, nsdatas []structs.NSData) {
 				if err != nil {
 					continue
 				}
+				domainReport.NSInfo = append(domainReport.NSInfo, nsinfo)
 				wc <- nsinfo
 			}
 			wg.Done()

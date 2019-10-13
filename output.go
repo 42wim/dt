@@ -72,7 +72,7 @@ func outputter(wc chan structs.NSInfo, done chan struct{}) {
 	done <- struct{}{}
 }
 
-func printDomainReport(domainReport check.DomainReport, flagShowFail bool) {
+func printDomainReport(domainReport *check.DomainReport, flagShowFail bool) {
 	fmt.Println()
 	for _, report := range domainReport.Report {
 		fmt.Print(report)
