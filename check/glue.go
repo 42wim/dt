@@ -130,7 +130,7 @@ func (g *Glue) getGlueIPs(domain string, server string) ([]net.IP, error) {
 	log.Debugf("GLUE: getGlueIPs")
 	defer log.Debugf("GLUE: getGlueIPs exit")
 	var ips []net.IP
-	res, err := g.s.Query(domain, dns.TypeNS, server, true)
+	res, err := scan.Query(domain, dns.TypeNS, server, true)
 	if err != nil {
 		return ips, err
 	}

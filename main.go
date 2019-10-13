@@ -37,7 +37,7 @@ func printHelp() {
 	flag.PrintDefaults()
 }
 
-func main() {
+func initScan() *scan.Scan {
 	var resolver string
 	flagDebug = flag.Bool("debug", false, "enable debug")
 	flagScan = flag.Bool("scan", false, "scan domain for common records")
@@ -49,7 +49,7 @@ func main() {
 
 	if len(flag.Args()) == 0 {
 		printHelp()
-		return
+		os.Exit(0)
 	}
 
 	if *flagDebug {
@@ -58,13 +58,17 @@ func main() {
 	if !*flagJSON {
 		fmt.Printf("using %s as resolver\n", resolver)
 	}
-
-	domain := flag.Arg(0)
 	s := scan.New(&scan.Config{
 		JSON:  flagJSON,
 		Debug: flagDebug,
 		QPS:   flagQPS,
 	}, resolver)
+	return s
+}
+
+func main() {
+	s := initScan()
+	domain := flag.Arg(0)
 	nsdatas, err := s.FindNS(dns.Fqdn(domain))
 	if len(nsdatas) == 0 {
 		fmt.Println("no nameservers found for", domain)
@@ -76,15 +80,6 @@ func main() {
 	}
 	var domainReport check.DomainReport
 	createNSHeader(s, domain, nsdatas, &domainReport)
-
-	// enable debug again if needed
-	if *flagDebug {
-		log.Level = logrus.DebugLevel
-	}
-
-	if !IPv6Guess {
-		nsdatas = removeIPv6(nsdatas)
-	}
 	doDomainReport(s, domain, nsdatas, &domainReport)
 }
 
@@ -106,6 +101,9 @@ func execCheckers(s *scan.Scan, domain string, nsdatas []structs.NSData, domainR
 }
 
 func doDomainReport(s *scan.Scan, domain string, nsdatas []structs.NSData, domainReport *check.DomainReport) {
+	if !IPv6Guess {
+		nsdatas = removeIPv6(nsdatas)
+	}
 	domainReport.Name = domain
 	sp := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
 	sp.Writer = os.Stderr
@@ -181,4 +179,9 @@ func createNSHeader(s *scan.Scan, domain string, nsdatas []structs.NSData, domai
 	close(wc)
 	sp.Stop()
 	<-done
+
+	//enable debug again
+	if *flagDebug {
+		log.Level = logrus.DebugLevel
+	}
 }

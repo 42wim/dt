@@ -295,3 +295,11 @@ func (s *Scan) Resolver() string {
 func (s *Scan) NSData() map[string][]structs.NSData {
 	return s.nsdataCache
 }
+
+func Query(q string, qtype uint16, server string, sec bool) (structs.Response, error) {
+	return query(q, qtype, server, sec)
+}
+
+func QueryRRset(q string, qtype uint16, server string, sec bool) ([]dns.RR, time.Duration, error) {
+	return queryRRset(q, qtype, server, sec)
+}

@@ -35,10 +35,6 @@ func extractIP(rrset []dns.RR) []net.IP {
 	return ips
 }
 
-func (s *Scan) ExtractRR(rrset []dns.RR, qtypes ...uint16) []dns.RR {
-	return extractRR(rrset, qtypes...)
-}
-
 func extractRR(rrset []dns.RR, qtypes ...uint16) []dns.RR {
 	var out []dns.RR
 	m := make(map[uint16]bool)
@@ -51,14 +47,6 @@ func extractRR(rrset []dns.RR, qtypes ...uint16) []dns.RR {
 		}
 	}
 	return out
-}
-
-func (s *Scan) Query(q string, qtype uint16, server string, sec bool) (structs.Response, error) {
-	return query(q, qtype, server, sec)
-}
-
-func Query(q string, qtype uint16, server string, sec bool) (structs.Response, error) {
-	return query(q, qtype, server, sec)
 }
 
 func query(q string, qtype uint16, server string, sec bool) (structs.Response, error) {
@@ -86,14 +74,6 @@ func query(q string, qtype uint16, server string, sec bool) (structs.Response, e
 		return resp, fmt.Errorf("failure: %s", dns.RcodeToString[in.Rcode])
 	}
 	return structs.Response{Msg: in, Server: server, Rtt: rtt}, nil
-}
-
-func (s *Scan) QueryRRset(q string, qtype uint16, server string, sec bool) ([]dns.RR, time.Duration, error) {
-	return queryRRset(q, qtype, server, sec)
-}
-
-func QueryRRset(q string, qtype uint16, server string, sec bool) ([]dns.RR, time.Duration, error) {
-	return queryRRset(q, qtype, server, sec)
 }
 
 func queryRRset(q string, qtype uint16, server string, sec bool) ([]dns.RR, time.Duration, error) {
