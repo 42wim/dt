@@ -133,9 +133,6 @@ func (c *SOACheck) Values() []ReportResult {
 	if checkSerial(soa.Serial) {
 		results = append(results, ReportResult{Result: "OK  : Serial format appears to be in the recommended format of YYYYMMDDnn.",
 			Status: true, Records: []string{soa.String()}, Name: "Serial"})
-	} else {
-		results = append(results, ReportResult{Result: "WARN: Serial is not in the recommended format of YYYYMMDDnn.",
-			Status: false, Name: "Serial"})
 	}
 	if c.checkMname(soa.Ns) {
 		results = append(results, ReportResult{Result: fmt.Sprintf("OK  : MNAME %s is listed at the parent servers.", soa.Ns),
