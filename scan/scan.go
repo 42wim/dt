@@ -89,6 +89,31 @@ func (s *Scan) zoneTransfer(domain, server string) []string {
 	return records
 }
 
+func (s *Scan) GetNSInfo(domain, name string, IP net.IP) (structs.NSInfo, error) {
+	var newnsinfo structs.NSInfo
+	info, _ := ipinfo(IP)
+	newnsinfo.IPInfo = info
+	newnsinfo.Name = name
+
+	soa, rtt, err := QueryRRset(domain, dns.TypeSOA, IP.String(), false)
+	if err == nil {
+		newnsinfo.Rtt = rtt
+		newnsinfo.Serial = int64(soa[0].(*dns.SOA).Serial)
+	}
+
+	keys, _, _ := QueryRRset(domain, dns.TypeDNSKEY, IP.String(), true)
+	res, err := Query(domain, dns.TypeNS, IP.String(), true)
+	if err == nil {
+		valid, keyinfo, _ := s.ValidateRRSIG(keys, res.Msg.Answer)
+		newnsinfo.DNSSECInfo = structs.DNSSECInfo{Valid: valid, KeyInfo: keyinfo, ChainValid: false}
+		if keyinfo.Start == 0 && len(keys) == 0 {
+			newnsinfo.Disabled = true
+		}
+	}
+	newnsinfo.Msg = res.Msg
+	return newnsinfo, nil
+}
+
 func (s *Scan) DomainScan(domain string) []Response {
 	return s.domainscan(domain)
 }

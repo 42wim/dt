@@ -181,6 +181,10 @@ func (s *Scan) validateParentDS(domain string, keyMap map[uint16]*dns.DNSKEY) (b
 	return true, nil
 }
 
+func (s *Scan) ValidateDomain(domain string) (bool, error) {
+	return s.validateDomain(domain)
+}
+
 func (s *Scan) validateDomain(domain string) (bool, error) {
 	// TODO concurrency
 	// get DNSKEY domain.

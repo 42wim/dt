@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/42wim/dt/structs"
+	"github.com/ammario/ipisp"
 	"github.com/miekg/dns"
 )
 
@@ -180,4 +181,18 @@ func removeWild(wild []string, rrset []dns.RR) []dns.RR {
 		}
 	}
 	return newset
+}
+
+func ipinfo(ip net.IP) (structs.IPInfo, error) {
+	client, _ := ipisp.NewDNSClient()
+	resp, err := client.LookupIP(net.ParseIP(ip.String()))
+	if err != nil {
+		return structs.IPInfo{}, err
+	}
+	return structs.IPInfo{
+		IP:  ip,
+		Loc: resp.Country,
+		ASN: resp.ASN,
+		ISP: resp.Name.Raw,
+	}, nil
 }

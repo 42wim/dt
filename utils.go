@@ -4,22 +4,7 @@ import (
 	"net"
 
 	"github.com/42wim/dt/structs"
-	"github.com/ammario/ipisp"
 )
-
-func ipinfo(ip net.IP) (structs.IPInfo, error) {
-	client, _ := ipisp.NewDNSClient()
-	resp, err := client.LookupIP(net.ParseIP(ip.String()))
-	if err != nil {
-		return structs.IPInfo{}, err
-	}
-	return structs.IPInfo{
-		IP:  ip,
-		Loc: resp.Country,
-		ASN: resp.ASN,
-		ISP: resp.Name.Raw,
-	}, nil
-}
 
 func removeIPv6(nsdatas []structs.NSData) []structs.NSData {
 	var newdatas []structs.NSData

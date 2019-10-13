@@ -6,7 +6,6 @@ import (
 
 	"github.com/42wim/dt/scan"
 	"github.com/42wim/dt/structs"
-	"github.com/labstack/gommon/log"
 	"github.com/miekg/dns"
 )
 

@@ -8,7 +8,10 @@ import (
 	"github.com/42wim/dt/scan"
 	"github.com/42wim/dt/structs"
 	"github.com/miekg/dns"
+	"github.com/sirupsen/logrus"
 )
+
+var log = logrus.New()
 
 type Checker interface {
 	Scan(string)
@@ -49,4 +52,15 @@ func (r *Report) scanError(check, ns, ip, domain string, results []dns.RR, err e
 		fail = true
 	}
 	return fail
+}
+
+func (r Report) String() string {
+	var sb strings.Builder
+	for _, res := range r.Result {
+		for _, record := range res.Records {
+			sb.WriteString(record)
+			sb.WriteString("\n")
+		}
+	}
+	return sb.String()
 }
