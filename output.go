@@ -22,7 +22,7 @@ func outputter(wc chan structs.NSInfo, done chan struct{}) {
 	}
 
 	fmt.Fprintln(w)
-	fmt.Fprintf(w, "NS\tIP\tLOC\tASN\tISP\trtt\tSerial\tDNSSEC\tValidFrom\tValidUntil\n")
+	fmt.Fprintf(w, "NS\tIP\tLOC\tASN\tISP\trtt\tSerial\n")
 	m := make(map[string][]structs.NSInfo)
 	for input := range wc {
 		m[input.Name] = append(m[input.Name], input)
@@ -54,7 +54,23 @@ func outputter(wc chan structs.NSInfo, done chan struct{}) {
 			} else {
 				fmt.Fprintf(w, "\t%v\t%v\t%v\t%v\t%v\t%v\t", ns.IPInfo.IP.String()+auth, ns.Loc, ns.ASN, fmt.Sprintf("%.40s", ns.ISP), ns.Rtt, ns.Serial)
 			}
-			//if ns.Valid && ns.ChainValid {
+			i++
+			fmt.Fprintln(w)
+		}
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "NS\tIP\tVersion\tDNSSEC\tValidFrom\tValidUntil\n")
+	for _, info := range m {
+		i := 0
+		for _, ns := range info {
+			if ns.Rtt == 0 {
+				continue
+			}
+			if i == 0 {
+				fmt.Fprintf(w, "%s\t%v\t%s\t", ns.Name, ns.IPInfo.IP.String(), ns.Version)
+			} else {
+				fmt.Fprintf(w, "\t%v\t%s\t", ns.IPInfo.IP.String(), ns.Version)
+			}
 			if ns.Valid {
 				fmt.Fprintf(w, "%v\t%s\t%s", "valid", humanize.Time(time.Unix(ns.KeyInfo.Start, 0)), humanize.Time(time.Unix(ns.KeyInfo.End, 0)))
 			} else {

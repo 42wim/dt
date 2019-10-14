@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/42wim/dt/structs"
@@ -111,6 +112,17 @@ func (s *Scan) GetNSInfo(domain, name string, IP net.IP) (structs.NSInfo, error)
 		}
 	}
 	newnsinfo.Msg = res.Msg
+
+	res, err = QueryClass("version.bind.", dns.TypeTXT, IP.String(), true, dns.ClassCHAOS)
+	if err != nil {
+		newnsinfo.Version = "unknown"
+	} else {
+		var sb strings.Builder
+		for _, rr := range res.Msg.Answer {
+			sb.WriteString(strings.Join(rr.(*dns.TXT).Txt, ""))
+		}
+		newnsinfo.Version = sb.String()
+	}
 	return newnsinfo, nil
 }
 

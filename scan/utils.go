@@ -49,7 +49,7 @@ func extractRR(rrset []dns.RR, qtypes ...uint16) []dns.RR {
 	return out
 }
 
-func query(q string, qtype uint16, server string, sec bool) (structs.Response, error) {
+func QueryClass(q string, qtype uint16, server string, sec bool, class uint16) (structs.Response, error) {
 	c := new(dns.Client)
 	m := prepMsg()
 	m.CheckingDisabled = true
@@ -63,7 +63,7 @@ func query(q string, qtype uint16, server string, sec bool) (structs.Response, e
 	m.Question[0] = dns.Question{
 		Name:   dns.Fqdn(q),
 		Qtype:  qtype,
-		Qclass: dns.ClassINET,
+		Qclass: class,
 	}
 	in, rtt, err := c.Exchange(m, net.JoinHostPort(server, "53"))
 	if err != nil {
@@ -74,6 +74,10 @@ func query(q string, qtype uint16, server string, sec bool) (structs.Response, e
 		return resp, fmt.Errorf("failure: %s", dns.RcodeToString[in.Rcode])
 	}
 	return structs.Response{Msg: in, Server: server, Rtt: rtt}, nil
+}
+
+func query(q string, qtype uint16, server string, sec bool) (structs.Response, error) {
+	return QueryClass(q, qtype, server, sec, dns.ClassINET)
 }
 
 func queryRRset(q string, qtype uint16, server string, sec bool) ([]dns.RR, time.Duration, error) {

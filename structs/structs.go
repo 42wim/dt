@@ -14,7 +14,8 @@ type NSInfo struct {
 	Serial int64
 	IPInfo
 	DNSSECInfo
-	Msg *dns.Msg `json:"-"`
+	Msg     *dns.Msg `json:"-"`
+	Version string
 }
 
 type NSData struct {
@@ -29,6 +30,7 @@ type IPInfo struct {
 	ASN ipisp.ASN
 	ISP string
 }
+
 type DNSSECInfo struct {
 	Valid      bool
 	ChainValid bool
