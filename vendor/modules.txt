@@ -1,31 +1,24 @@
 # github.com/ammario/ipisp v1.0.0
 github.com/ammario/ipisp
-# github.com/briandowns/spinner v1.7.0
+# github.com/briandowns/spinner v1.11.1
 github.com/briandowns/spinner
 # github.com/dustin/go-humanize v1.0.0
 github.com/dustin/go-humanize
 # github.com/fatih/color v1.7.0
 github.com/fatih/color
-# github.com/konsorten/go-windows-terminal-sequences v1.0.1
+# github.com/konsorten/go-windows-terminal-sequences v1.0.3
 github.com/konsorten/go-windows-terminal-sequences
-# github.com/labstack/gommon v0.3.0
-github.com/labstack/gommon/color
-github.com/labstack/gommon/log
 # github.com/mattn/go-colorable v0.1.2
 github.com/mattn/go-colorable
 # github.com/mattn/go-isatty v0.0.9
 github.com/mattn/go-isatty
-# github.com/miekg/dns v1.1.22
+# github.com/miekg/dns v1.1.31
 github.com/miekg/dns
 # github.com/pkg/errors v0.8.0
 github.com/pkg/errors
-# github.com/sirupsen/logrus v1.4.2
+# github.com/sirupsen/logrus v1.6.0
 github.com/sirupsen/logrus
-# github.com/valyala/bytebufferpool v1.0.0
-github.com/valyala/bytebufferpool
-# github.com/valyala/fasttemplate v1.0.1
-github.com/valyala/fasttemplate
-# golang.org/x/crypto v0.0.0-20190923035154-9ee001bba392
+# golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550
 golang.org/x/crypto/ed25519
 golang.org/x/crypto/ed25519/internal/edwards25519
 # golang.org/x/net v0.0.0-20190923162816-aa69164e4478
