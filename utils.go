@@ -8,14 +8,19 @@ import (
 
 func removeIPv6(nsdatas []structs.NSData) []structs.NSData {
 	var newdatas []structs.NSData
+
 	for _, nsdata := range nsdatas {
-		var ips []net.IP
-		var infos []structs.NSInfo
+		var (
+			ips   []net.IP
+			infos []structs.NSInfo
+		)
+
 		for _, ip := range nsdata.IP {
 			if ip.To4() != nil {
 				ips = append(ips, ip)
 			}
 		}
+
 		nsdata.IP = ips
 
 		for _, info := range nsdata.Info {
@@ -23,9 +28,10 @@ func removeIPv6(nsdatas []structs.NSData) []structs.NSData {
 				infos = append(infos, info)
 			}
 		}
-		nsdata.Info = infos
 
+		nsdata.Info = infos
 		newdatas = append(newdatas, nsdata)
 	}
+
 	return newdatas
 }

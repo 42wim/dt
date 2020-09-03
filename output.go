@@ -14,7 +14,9 @@ import (
 
 func outputter(wc chan structs.NSInfo, done chan struct{}) {
 	const padding = 1
+
 	var w *tabwriter.Writer
+
 	if *flagJSON {
 		w = tabwriter.NewWriter(ioutil.Discard, 0, 0, padding, ' ', tabwriter.Debug)
 	} else {
@@ -23,13 +25,18 @@ func outputter(wc chan structs.NSInfo, done chan struct{}) {
 
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "NS\tIP\tLOC\tASN\tISP\trtt\tSerial\n")
+
 	m := make(map[string][]structs.NSInfo)
+
 	for input := range wc {
 		m[input.Name] = append(m[input.Name], input)
 	}
+
 	for _, info := range m {
 		i := 0
+
 		var failed bool
+
 		for _, ns := range info {
 			if ns.Rtt == 0 {
 				failed = true
@@ -37,14 +44,18 @@ func outputter(wc chan structs.NSInfo, done chan struct{}) {
 			// TODO output somewhere else
 			// LAME servers
 			auth := ""
+
 			if ns.Msg != nil && !ns.Msg.Authoritative {
 				auth = " L"
 			}
+
 			if failed {
 				fmt.Fprintf(w, "%s\t%v\t%v\t%v\t%v\t%v\t%v\t%v\t", ns.Name, ns.IPInfo.IP.String()+auth, ns.Loc, ns.ASN, ns.ISP, "error", "error", "error")
 				fmt.Fprintln(w)
+
 				break
 			}
+
 			if ns.IPInfo.IP.To4() == nil {
 				IPv6Guess = true
 			}
@@ -54,23 +65,30 @@ func outputter(wc chan structs.NSInfo, done chan struct{}) {
 			} else {
 				fmt.Fprintf(w, "\t%v\t%v\t%v\t%v\t%v\t%v\t", ns.IPInfo.IP.String()+auth, ns.Loc, ns.ASN, fmt.Sprintf("%.40s", ns.ISP), ns.Rtt, ns.Serial)
 			}
+
 			i++
+
 			fmt.Fprintln(w)
 		}
 	}
+
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "NS\tIP\tVersion\tDNSSEC\tValidFrom\tValidUntil\n")
+
 	for _, info := range m {
 		i := 0
+
 		for _, ns := range info {
 			if ns.Rtt == 0 {
 				continue
 			}
+
 			if i == 0 {
 				fmt.Fprintf(w, "%s\t%v\t%s\t", ns.Name, ns.IPInfo.IP.String(), ns.Version)
 			} else {
 				fmt.Fprintf(w, "\t%v\t%s\t", ns.IPInfo.IP.String(), ns.Version)
 			}
+
 			if ns.Valid {
 				fmt.Fprintf(w, "%v\t%s\t%s", "valid", humanize.Time(time.Unix(ns.KeyInfo.Start, 0)), humanize.Time(time.Unix(ns.KeyInfo.End, 0)))
 			} else {
@@ -80,24 +98,31 @@ func outputter(wc chan structs.NSInfo, done chan struct{}) {
 					fmt.Fprintf(w, "%v\t%s\t%s", "invalid", humanize.Time(time.Unix(ns.KeyInfo.Start, 0)), humanize.Time(time.Unix(ns.KeyInfo.End, 0)))
 				}
 			}
+
 			i++
+
 			fmt.Fprintln(w)
 		}
 	}
+
 	w.Flush()
+
 	done <- struct{}{}
 }
 
 func printDomainReport(domainReport *check.DomainReport, flagShowFail bool) {
 	fmt.Println()
+
 	for _, report := range domainReport.Report {
 		fmt.Print(report)
 	}
+
 	fmt.Println()
 
 	if !flagShowFail {
 		for _, report := range domainReport.Report {
 			fmt.Println(report.Type)
+
 			for _, res := range report.Result {
 				if res.Result != "" {
 					fmt.Println("\t", res.Result)

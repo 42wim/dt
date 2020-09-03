@@ -39,6 +39,7 @@ func printHelp() {
 
 func initScan() *scan.Scan {
 	var resolver string
+
 	flagDebug = flag.Bool("debug", false, "enable debug")
 	flagScan = flag.Bool("scan", false, "scan domain for common records")
 	flagQPS = flag.Int("qps", 10, "queries per seconds (per nameserver)")
@@ -55,30 +56,37 @@ func initScan() *scan.Scan {
 	if *flagDebug {
 		log.Level = logrus.DebugLevel
 	}
+
 	if !*flagJSON {
 		fmt.Printf("using %s as resolver\n", resolver)
 	}
+
 	s := scan.New(&scan.Config{
 		JSON:  flagJSON,
 		Debug: flagDebug,
 		QPS:   flagQPS,
 	}, resolver)
+
 	return s
 }
 
 func main() {
 	s := initScan()
 	domain := flag.Arg(0)
+
 	nsdatas, err := s.FindNS(dns.Fqdn(domain))
 	if len(nsdatas) == 0 {
 		fmt.Println("no nameservers found for", domain)
 		os.Exit(1)
 	}
+
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+
 	var domainReport check.DomainReport
+
 	createNSHeader(s, domain, nsdatas, &domainReport)
 	doDomainReport(s, domain, nsdatas, &domainReport)
 }
@@ -104,9 +112,11 @@ func doDomainReport(s *scan.Scan, domain string, nsdatas []structs.NSData, domai
 	if !IPv6Guess {
 		nsdatas = removeIPv6(nsdatas)
 	}
+
 	domainReport.Name = domain
 	sp := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
 	sp.Writer = os.Stderr
+
 	if *flagJSON || *flagDebug {
 		sp.Writer = ioutil.Discard
 	}
@@ -117,26 +127,33 @@ func doDomainReport(s *scan.Scan, domain string, nsdatas []structs.NSData, domai
 	if !*flagJSON {
 		printDomainReport(domainReport, *flagShowFail)
 	}
+
 	sp.Stop()
 
 	domainReport.Timestamp = time.Now()
+
 	if *flagScan {
 		sp := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
 		sp.Writer = os.Stderr
+
 		if *flagJSON || *flagDebug {
 			sp.Writer = ioutil.Discard
 		}
 		//        sp.Suffix = " Scanning... will take approx " + fmt.Sprintf("%#v seconds", float64(scanEntries/(len(servers)*(*s.QPS)))+float64(scanEntries)*avgRtt.Seconds())
-		//t := time.Now()
+		// t := time.Now()
 		sp.Start()
+
 		domainReport.Scan = s.DomainScan(domain)
+
 		sp.Stop()
 	}
+
 	if *flagJSON {
 		res, err := json.Marshal(domainReport)
 		if err != nil {
 			fmt.Printf("encoding failed: %v\n", err)
 		}
+
 		fmt.Println(string(res))
 	}
 }
@@ -144,14 +161,18 @@ func doDomainReport(s *scan.Scan, domain string, nsdatas []structs.NSData, domai
 func createNSHeader(s *scan.Scan, domain string, nsdatas []structs.NSData, domainReport *check.DomainReport) {
 	sp := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
 	sp.Writer = os.Stderr
+
 	if *flagJSON || *flagDebug {
 		sp.Writer = ioutil.Discard
 	}
+
 	sp.Start()
 
 	wc := make(chan structs.NSInfo)
 	done := make(chan struct{})
+
 	var wg sync.WaitGroup
+
 	go outputter(wc, done)
 
 	// for now disable debuglevel (because of multiple goroutines output)
@@ -161,16 +182,21 @@ func createNSHeader(s *scan.Scan, domain string, nsdatas []structs.NSData, domai
 
 	for _, nsdata := range nsdatas {
 		wg.Add(1)
+
 		stubInfos := nsdata.Info
+
 		go func() {
 			for _, ns := range stubInfos {
 				nsinfo, err := s.GetNSInfo(domain, ns.Name, ns.IP)
 				if err != nil {
 					continue
 				}
+
 				domainReport.NSInfo = append(domainReport.NSInfo, nsinfo)
+
 				wc <- nsinfo
 			}
+
 			wg.Done()
 		}()
 	}
@@ -178,9 +204,10 @@ func createNSHeader(s *scan.Scan, domain string, nsdatas []structs.NSData, domai
 	wg.Wait()
 	close(wc)
 	sp.Stop()
+
 	<-done
 
-	//enable debug again
+	// enable debug again
 	if *flagDebug {
 		log.Level = logrus.DebugLevel
 	}

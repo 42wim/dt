@@ -26,12 +26,14 @@ func NewWeb(s *scan.Scan, ns []structs.NSData) *WebCheck {
 		s:  s,
 		NS: ns,
 	}
+
 	return c
 }
 
 func (c *WebCheck) Scan(domain string) {
 	log.Debugf("Web: scan")
 	defer log.Debugf("Web: scan exit")
+
 	for _, ns := range c.NS {
 		for _, nsip := range ns.IP {
 			data := WebData{Name: ns.Name, IP: nsip.String()}
@@ -40,6 +42,7 @@ func (c *WebCheck) Scan(domain string) {
 			if !c.Report.scanError("WWW ipv4 scan", ns.Name, nsip.String(), domain, rrset, err) {
 				data.A = append(data.A, rrset...)
 			}
+
 			rrset, _, err = scan.QueryRRset("www."+domain, dns.TypeAAAA, nsip.String(), true)
 			if !c.Report.scanError("WWW ipv6 scan", ns.Name, nsip.String(), domain, rrset, err) {
 				data.A = append(data.A, rrset...)
@@ -47,16 +50,20 @@ func (c *WebCheck) Scan(domain string) {
 			// apex
 			res, err := scan.Query(domain, dns.TypeA, nsip.String(), true)
 			rrset = extractRRMsg(res.Msg, dns.TypeA)
+
 			if !c.Report.scanError("root ipv4 scan", ns.Name, nsip.String(), domain, rrset, err) {
 				data.Apex = append(data.Apex, rrset...)
 				data.Apex = append(data.Apex, extractRR(res.Msg.Answer, dns.TypeCNAME)...)
 			}
+
 			res, err = scan.Query(domain, dns.TypeAAAA, nsip.String(), true)
 			rrset = extractRRMsg(res.Msg, dns.TypeAAAA)
+
 			if !c.Report.scanError("root ipv6 scan", ns.Name, nsip.String(), domain, rrset, err) {
 				data.Apex = append(data.Apex, rrset...)
 				data.Apex = append(data.Apex, extractRR(res.Msg.Answer, dns.TypeCNAME)...)
 			}
+
 			c.Web = append(c.Web, data)
 		}
 	}
@@ -64,17 +71,25 @@ func (c *WebCheck) Scan(domain string) {
 
 func (c *WebCheck) CheckWww() []ReportResult {
 	rep := []ReportResult{}
+
 	for _, web := range c.Web {
 		if len(web.A) > 0 {
-			rep = append(rep, ReportResult{Result: ("OK  : Found a www record"),
-				Status: true, Name: "WWW"})
+			rep = append(rep, ReportResult{
+				Result: ("OK  : Found a www record"),
+				Status: true, Name: "WWW",
+			})
+
 			break
 		}
 	}
+
 	if len(rep) == 0 {
-		rep = append(rep, ReportResult{Result: ("WARN: Didn't find a www record"),
-			Status: false, Name: "WWW"})
+		rep = append(rep, ReportResult{
+			Result: ("WARN: Didn't find a www record"),
+			Status: false, Name: "WWW",
+		})
 	}
+
 	return rep
 }
 
@@ -89,60 +104,84 @@ func (c *WebCheck) checkRFC1918() bool {
 			}
 		}
 	}
+
 	return false
 }
 
 func (c *WebCheck) CheckApex() []ReportResult {
 	rep := []ReportResult{}
+
 	match := false
 	cmatch := false
+
 	for _, web := range c.Web {
 		if len(web.Apex) > 0 {
 			for _, rr := range web.Apex {
 				switch rr.(type) {
 				case *dns.A, *dns.AAAA:
 					if !match {
-						rep = append(rep, ReportResult{Result: ("OK  : Found a root record"),
-							Status: true, Name: "Apex"})
+						rep = append(rep, ReportResult{
+							Result: ("OK  : Found a root record"),
+							Status: true, Name: "Apex",
+						})
 						match = true
 					}
 				case *dns.CNAME:
 					cmatch = true
-					rep = append(rep, ReportResult{Result: ("WARN: Found a CNAME for the root record"),
-						Status: false, Name: "ApexCNAME"})
+
+					rep = append(rep, ReportResult{
+						Result: ("WARN: Found a CNAME for the root record"),
+						Status: false, Name: "ApexCNAME",
+					})
 				}
+
 				break
 			}
 		}
 	}
+
 	if len(rep) == 0 {
-		rep = append(rep, ReportResult{Result: ("WARN: Didn't find a root record"),
-			Status: false, Name: "Apex"})
+		rep = append(rep, ReportResult{
+			Result: ("WARN: Didn't find a root record"),
+			Status: false, Name: "Apex",
+		})
 	}
+
 	if !cmatch {
-		rep = append(rep, ReportResult{Result: ("OK  : Didn't find a CNAME for the root record"),
-			Status: true, Name: "ApexCNAME"})
+		rep = append(rep, ReportResult{
+			Result: ("OK  : Didn't find a CNAME for the root record"),
+			Status: true, Name: "ApexCNAME",
+		})
 	}
+
 	return rep
 }
 
 func (c *WebCheck) Values() []ReportResult {
 	var results []ReportResult
+
 	if !c.checkRFC1918() {
-		results = append(results, ReportResult{Result: "OK  : Your www record has a public / routable address.",
-			Status: true, Name: "RFC1918"})
+		results = append(results, ReportResult{
+			Result: "OK  : Your www record has a public / routable address.",
+			Status: true, Name: "RFC1918",
+		})
 	} else {
-		results = append(results, ReportResult{Result: "FAIL: Your www record has a non-routable (RFC1918) address.",
-			Status: false, Name: "RFC1918"})
+		results = append(results, ReportResult{
+			Result: "FAIL: Your www record has a non-routable (RFC1918) address.",
+			Status: false, Name: "RFC1918",
+		})
 	}
+
 	return results
 }
 
 func (c *WebCheck) CreateReport(domain string) Report {
 	c.Scan(domain)
+
 	c.Report.Type = "Web"
 	c.Report.Result = append(c.Report.Result, c.CheckWww()...)
 	c.Report.Result = append(c.Report.Result, c.CheckApex()...)
 	c.Report.Result = append(c.Report.Result, c.Values()...)
+
 	return c.Report
 }

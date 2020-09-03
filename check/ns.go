@@ -34,23 +34,28 @@ func NewNS(s *scan.Scan, ns []structs.NSData) *NSCheck {
 		s:  s,
 		NS: ns,
 	}
+
 	return c
 }
 
 func (c *NSCheck) Scan(domain string) {
 	log.Debugf("NS: Scan")
 	defer log.Debugf("NS: Scan exit")
+
 	c.CacheIP = make(map[string][]net.IP)
+
 	for _, ns := range c.NS {
 		for _, nsip := range ns.IP {
 			data := NSCheckData{Name: ns.Name, IP: nsip.String()}
 			res, err := scan.Query(domain, dns.TypeNS, nsip.String(), true)
 			rrset := extractRRMsg(res.Msg, dns.TypeNS)
+
 			if !c.Report.scanError("NS scan", ns.Name, nsip.String(), domain, rrset, err) {
 				data.NS = rrset
 				data.Auth = res.Msg.Authoritative
 				data.Recursive = res.Msg.RecursionAvailable
 			}
+
 			c.NSCheck = append(c.NSCheck, data)
 		}
 	}
@@ -59,8 +64,10 @@ func (c *NSCheck) Scan(domain string) {
 func (c *NSCheck) CheckCNAME() []ReportResult {
 	log.Debugf("NS: CheckCNAME")
 	defer log.Debugf("NS: CheckCNAME exit")
+
 	rep := []ReportResult{}
 	m := make(map[string]bool)
+
 	for _, ns := range c.NSCheck {
 		// skip lookup if already done
 		if _, ok := m[ns.Name]; ok {
@@ -71,37 +78,52 @@ func (c *NSCheck) CheckCNAME() []ReportResult {
 		if err != nil {
 			break
 		}
+
 		cname := extractRR(res.Msg.Answer, dns.TypeCNAME)
 		if len(cname) > 0 {
-			rep = append(rep, ReportResult{Result: fmt.Sprintf("FAIL: Your nameserver (%s) is a CNAME.", ns.Name),
-				Status: false, Name: "CNAME"})
+			rep = append(rep, ReportResult{
+				Result: fmt.Sprintf("FAIL: Your nameserver (%s) is a CNAME.", ns.Name),
+				Status: false, Name: "CNAME",
+			})
 		}
+
 		res, err = scan.Query(dns.Fqdn(ns.Name), dns.TypeAAAA, c.s.Resolver(), true)
 		if err != nil {
 			break
 		}
+
 		cname = extractRR(res.Msg.Answer, dns.TypeCNAME)
 		if len(cname) > 0 {
-			rep = append(rep, ReportResult{Result: fmt.Sprintf("FAIL: Your nameserver (%s) is a CNAME.", ns.Name),
-				Status: false, Name: "CNAME"})
+			rep = append(rep, ReportResult{
+				Result: fmt.Sprintf("FAIL: Your nameserver (%s) is a CNAME.", ns.Name),
+				Status: false, Name: "CNAME",
+			})
 		}
+
 		m[ns.Name] = true
 	}
+
 	if len(rep) == 0 {
-		rep = append(rep, ReportResult{Result: "OK  : No CNAMEs found for your NS records",
-			Status: true, Name: "CNAME"})
+		rep = append(rep, ReportResult{
+			Result: "OK  : No CNAMEs found for your NS records",
+			Status: true, Name: "CNAME",
+		})
 	}
+
 	return rep
 }
 
 func (c *NSCheck) CheckParent(domain string) []ReportResult {
 	log.Debugf("NS: CheckParent")
 	defer log.Debugf("NS: CheckParent exit")
+
 	var rep []ReportResult
+
 	nsdata, err := c.s.FindNS(getParentDomain(domain))
 	if err != nil {
 		return []ReportResult{}
 	}
+
 	var rrset []dns.RR
 loop:
 	for _, ns := range nsdata {
@@ -116,11 +138,14 @@ loop:
 			}
 		}
 	}
+
 	m := make(map[string]bool)
 	for _, rr := range rrset {
 		m[dns.Fqdn(rr.(*dns.NS).Ns)] = true
 	}
+
 	missing := []string{}
+
 	for _, ns := range c.NS {
 		if _, ok := m[ns.Name]; !ok {
 			missing = append(missing, ns.Name)
@@ -128,48 +153,67 @@ loop:
 			m[ns.Name] = false
 		}
 	}
+
 	if len(missing) > 0 {
-		rep = append(rep, ReportResult{Result: fmt.Sprintf("FAIL: The following nameservers are not listed as NS at the parent nameservers: %s", missing),
-			Status: false, Name: "ParentListed"})
+		rep = append(rep, ReportResult{
+			Result: fmt.Sprintf("FAIL: The following nameservers are not listed as NS at the parent nameservers: %s", missing),
+			Status: false, Name: "ParentListed",
+		})
 	} else {
-		rep = append(rep, ReportResult{Result: "OK  : Your nameservers are also listed as NS at the parent nameservers",
-			Status: true, Name: "ParentListed"})
+		rep = append(rep, ReportResult{
+			Result: "OK  : Your nameservers are also listed as NS at the parent nameservers",
+			Status: true, Name: "ParentListed",
+		})
 	}
 
 	// find the records that are sent by parent NS but arent in the domain NS
 	missing = []string{}
+
 	for k, v := range m {
 		if v {
 			missing = append(missing, k)
 		}
 	}
+
 	if len(missing) > 0 {
-		rep = append(rep, ReportResult{Result: fmt.Sprintf("FAIL: The following nameservers are listed at the parent but not as NS at your nameservers: %s", missing),
-			Status: false, Name: "SelfListed"})
+		rep = append(rep, ReportResult{
+			Result: fmt.Sprintf("FAIL: The following nameservers are listed at the parent but not as NS at your nameservers: %s", missing),
+			Status: false, Name: "SelfListed",
+		})
 	} else {
-		rep = append(rep, ReportResult{Result: "OK  : Your parent nameservers are also listed as NS at your nameservers",
-			Status: true, Name: "SelfListed"})
+		rep = append(rep, ReportResult{
+			Result: "OK  : Your parent nameservers are also listed as NS at your nameservers",
+			Status: true, Name: "SelfListed",
+		})
 	}
+
 	return rep
 }
 
 func (c *NSCheck) Identical() ReportResult {
 	m := make(map[string][]string)
+
 	for _, ns := range c.NSCheck {
 		nsstr := []string{}
+
 		if ns.NS != nil && ns.Error == "" {
 			for _, nsc := range ns.NS {
 				nsstr = append(nsstr, nsc.String()+"\n\t ")
 			}
+
 			sort.Strings(nsstr)
+
 			m[strings.Join(nsstr, "")] = append(m[strings.Join(nsstr, "")], ns.IP)
 		}
 	}
+
 	res := ReportResult{}
+
 	if len(m) > 1 {
-		res.Result = fmt.Sprintf("FAIL: NS not identical\n")
+		res.Result = "FAIL: NS not identical"
 		res.Status = false
 		res.Name = "Identical"
+
 		for k, v := range m {
 			res.Result += fmt.Sprintf("\t %s\n\t %s\n", v, k)
 		}
@@ -178,36 +222,44 @@ func (c *NSCheck) Identical() ReportResult {
 		res.Status = true
 		res.Name = "Identical"
 	}
+
 	return res
 }
 
 func (c *NSCheck) ASN() ReportResult {
 	m := make(map[string][]string)
+
 	for _, ns := range c.NSCheck {
 		ip := net.ParseIP(ns.IP)
 		info, _ := ipinfo(ip)
 		m[info.ASN.String()] = append(m[info.ASN.String()], ns.IP)
 	}
+
 	res := ReportResult{}
+
 	if len(m) > 1 {
 		res.Result = "OK  : Nameservers are spread over multiple AS"
 		res.Status = true
 		res.Name = "MultipleAS"
 	} else {
 		as := ""
+
 		for k := range m {
 			as = k
 			break
 		}
+
 		res.Result = fmt.Sprintf("WARN: Nameservers are all on the same AS (%s). This is a single point of failure.", as)
 		res.Status = false
 		res.Name = "MultipleAS"
 	}
+
 	return res
 }
 
 func (c *NSCheck) IPCheck() []ReportResult {
 	m := make(map[string]int)
+
 	for _, ns := range c.NSCheck {
 		if strings.Contains(ns.IP, ":") {
 			m["ipv6"]++
@@ -217,106 +269,151 @@ func (c *NSCheck) IPCheck() []ReportResult {
 	}
 
 	res := []ReportResult{}
+
 	if m["ipv6"] == 0 {
-		res = append(res, ReportResult{Result: "WARN: No IPv6 nameservers found. IPv6-only users will have problems.",
-			Status: false, Name: "IPv6"})
+		res = append(res, ReportResult{
+			Result: "WARN: No IPv6 nameservers found. IPv6-only users will have problems.",
+			Status: false, Name: "IPv6",
+		})
 	}
 
 	// I wonder when this will ever happen :)
 	if m["ipv4"] == 0 {
-		res = append(res, ReportResult{Result: "WARN: No IPv4 nameservers found. IPv4-only users will have problems.",
-			Status: false, Name: "IPv4"})
+		res = append(res, ReportResult{
+			Result: "WARN: No IPv4 nameservers found. IPv4-only users will have problems.",
+			Status: false, Name: "IPv4",
+		})
 	}
+
 	if (m["ipv4"] > 0) && (m["ipv6"] > 0) {
-		res = append(res, ReportResult{Result: "OK  : IPv4 and IPv6 nameservers found.",
-			Status: true, Name: "IPv4IPv6"})
+		res = append(res, ReportResult{
+			Result: "OK  : IPv4 and IPv6 nameservers found.",
+			Status: true, Name: "IPv4IPv6",
+		})
 	}
+
 	return res
 }
 
 func (c *NSCheck) Auth() []ReportResult {
 	res := []ReportResult{}
+
 	ok := true
+
 	for _, ns := range c.NSCheck {
 		if len(ns.NS) > 0 && !ns.Auth {
-			res = append(res, ReportResult{Result: fmt.Sprintf("FAIL: %s (%s) is not authoritative.", ns.Name, ns.IP),
-				Status: false, Name: "Auth"})
+			res = append(res, ReportResult{
+				Result: fmt.Sprintf("FAIL: %s (%s) is not authoritative.", ns.Name, ns.IP),
+				Status: false, Name: "Auth",
+			})
 			ok = false
 		}
 	}
+
 	if ok {
-		res = append(res, ReportResult{Result: "OK  : All nameservers are authoritative.",
-			Status: true, Name: "Auth"})
+		res = append(res, ReportResult{
+			Result: "OK  : All nameservers are authoritative.",
+			Status: true, Name: "Auth",
+		})
 	}
+
 	return res
 }
 
 func (c *NSCheck) Recursive() []ReportResult {
 	res := []ReportResult{}
 	ok := true
+
 	for _, ns := range c.NSCheck {
 		if len(ns.NS) > 0 && ns.Recursive {
-			res = append(res, ReportResult{Result: fmt.Sprintf("WARN: %s (%s) allows recursive queries.", ns.Name, ns.IP),
-				Status: false, Name: "Recursive"})
+			res = append(res, ReportResult{
+				Result: fmt.Sprintf("WARN: %s (%s) allows recursive queries.", ns.Name, ns.IP),
+				Status: false, Name: "Recursive",
+			})
 			ok = false
 		}
 	}
+
 	if ok {
-		res = append(res, ReportResult{Result: "OK  : All nameservers report they are not allowing recursive queries.",
-			Status: true, Name: "Recursive"})
+		res = append(res, ReportResult{
+			Result: "OK  : All nameservers report they are not allowing recursive queries.",
+			Status: true, Name: "Recursive",
+		})
 	}
+
 	return res
 }
 
 func (c *NSCheck) checkSameSubnet() bool {
 	var ips []net.IP
+
 	for _, ns := range c.NS {
 		ips = append(ips, ns.IP...)
 	}
+
 	return isSameSubnet(ips...)
 }
 
 func (c *NSCheck) Values() []ReportResult {
-	var results []ReportResult
-	var rrset []dns.RR
+	var (
+		results []ReportResult
+		rrset   []dns.RR
+	)
+
 	for _, ns := range c.NSCheck {
 		if ns.NS != nil {
 			rrset = ns.NS
 			break
 		}
 	}
+
 	if len(rrset) > 1 {
 		records := []string{}
+
 		for _, rr := range rrset {
 			records = append(records, rr.String())
 		}
-		results = append(results, ReportResult{Result: "OK  : Multiple nameservers found",
-			Status: true, Records: records, Name: "Multiple"})
+
+		results = append(results, ReportResult{
+			Result: "OK  : Multiple nameservers found",
+			Status: true, Records: records, Name: "Multiple",
+		})
 	} else {
-		results = append(results, ReportResult{Result: fmt.Sprintf("WARN: Only %v nameserver found. Extra nameservers increases reliability", len(rrset)),
-			Status: false, Name: "Multiple"})
+		results = append(results, ReportResult{
+			Result: fmt.Sprintf("WARN: Only %v nameserver found. Extra nameservers increases reliability", len(rrset)),
+			Status: false, Name: "Multiple",
+		})
 	}
 
 	for _, ns := range c.NSCheck {
 		if ns.NS != nil {
 			if len(ns.CNAME) > 1 {
-				results = append(results, ReportResult{Result: fmt.Sprintf("FAIL: NS %s is a CNAME for %s", ns.Name, ns.CNAME[0].(*dns.CNAME).Target),
-					Status: false, Name: "NSCNAME"})
+				results = append(results, ReportResult{
+					Result: fmt.Sprintf("FAIL: NS %s is a CNAME for %s", ns.Name, ns.CNAME[0].(*dns.CNAME).Target),
+					Status: false, Name: "NSCNAME",
+				})
 			}
 		}
 	}
+
 	if !c.checkSameSubnet() {
-		results = append(results, ReportResult{Result: "OK  : Your nameservers are in different subnets.",
-			Status: true, Name: "Subnet"})
+		results = append(results, ReportResult{
+			Result: "OK  : Your nameservers are in different subnets.",
+			Status: true, Name: "Subnet",
+		})
 	} else {
-		results = append(results, ReportResult{Result: "WARN: Your nameservers are in the same subnet.",
-			Status: false, Name: "Subnet"})
+		results = append(results, ReportResult{
+			Result: "WARN: Your nameservers are in the same subnet.",
+			Status: false, Name: "Subnet",
+		})
 	}
+
 	return results
 }
 
 func (c *NSCheck) CreateReport(domain string) Report {
 	c.Scan(domain)
+
 	c.Report.Type = "NS"
 	c.Report.Result = append(c.Report.Result, c.Identical())
 	c.Report.Result = append(c.Report.Result, c.Values()...)
@@ -326,5 +423,6 @@ func (c *NSCheck) CreateReport(domain string) Report {
 	c.Report.Result = append(c.Report.Result, c.Recursive()...)
 	c.Report.Result = append(c.Report.Result, c.CheckParent(domain)...)
 	c.Report.Result = append(c.Report.Result, c.CheckCNAME()...)
+
 	return c.Report
 }
