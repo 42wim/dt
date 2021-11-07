@@ -114,7 +114,7 @@ func doDomainReport(s *scan.Scan, domain string, nsdatas []structs.NSData, domai
 	}
 
 	domainReport.Name = domain
-	sp := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+	sp := spinner.New(spinner.CharSets[26], 100*time.Millisecond)
 	sp.Writer = os.Stderr
 
 	if *flagJSON || *flagDebug {
@@ -133,7 +133,7 @@ func doDomainReport(s *scan.Scan, domain string, nsdatas []structs.NSData, domai
 	domainReport.Timestamp = time.Now()
 
 	if *flagScan {
-		sp := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+		sp := spinner.New(spinner.CharSets[26], 100*time.Millisecond)
 		sp.Writer = os.Stderr
 
 		if *flagJSON || *flagDebug {
@@ -159,7 +159,7 @@ func doDomainReport(s *scan.Scan, domain string, nsdatas []structs.NSData, domai
 }
 
 func createNSHeader(s *scan.Scan, domain string, nsdatas []structs.NSData, domainReport *check.DomainReport) {
-	sp := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+	sp := spinner.New(spinner.CharSets[26], 100*time.Millisecond)
 	sp.Writer = os.Stderr
 
 	if *flagJSON || *flagDebug {

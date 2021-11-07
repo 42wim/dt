@@ -11,28 +11,22 @@ DNS tool that displays information about your domain.
 
 Feedback, issues and PR's are welcome.
 
-# TODO
-* daemon mode
-* grading 
-* keeping history
-
 # Installing
 
 ## Binaries
 Binaries can be found [here](https://github.com/42wim/dt/releases/)
 
 ## Building
-Go 1.6.3+ is required. Make sure you have [Go](https://golang.org/doc/install) properly installed, including setting up your [GOPATH] (https://golang.org/doc/code.html#GOPATH)
+Go 1.13+ is required.
 
 ```
-cd $GOPATH
-go get github.com/42wim/dt
+go install github.com/42wim/dt
 ```
 
 You should now have dt binary in the bin directory:
 
 ```
-$ ls bin/
+$ ls ~/go/bin/
 dt
 ```
 

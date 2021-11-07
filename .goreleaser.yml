@@ -1,0 +1,35 @@
+release:
+  prerelease: auto
+  name_template: "{{.ProjectName}} v{{.Version}}"
+
+builds:
+- env:
+    - CGO_ENABLED=0
+  goos:
+    - freebsd
+    - windows
+    - darwin
+    - linux
+    - dragonfly
+    - netbsd
+    - openbsd
+  goarch:
+    - amd64
+    - arm
+    - arm64
+    - 386
+  ldflags:
+    - -s -w -X main.githash={{.ShortCommit}}
+
+archives:
+  -
+    id: dt
+    builds:
+    - dt
+    name_template: "{{ .Binary }}-{{ .Version }}-{{ .Os }}-{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
+    format: binary
+    files:
+      - none*
+
+checksum:
+  name_template: 'checksums.txt'
