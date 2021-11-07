@@ -14,13 +14,13 @@
 package spinner
 
 import (
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -163,10 +163,7 @@ var colorAttributeMap = map[string]color.Attribute{
 
 // validColor will make sure the given color is actually allowed.
 func validColor(c string) bool {
-	if validColors[c] {
-		return true
-	}
-	return false
+	return validColors[c]
 }
 
 // Spinner struct to hold the provided options.
@@ -273,7 +270,7 @@ func (s *Spinner) Start() {
 	}
 	if s.HideCursor && runtime.GOOS != "windows" {
 		// hides the cursor
-		fmt.Print("\033[?25l")
+		fmt.Fprint(s.Writer, "\033[?25l")
 	}
 	s.active = true
 	s.mu.Unlock()
@@ -285,10 +282,11 @@ func (s *Spinner) Start() {
 				case <-s.stopChan:
 					return
 				default:
+					s.mu.Lock()
 					if !s.active {
+						s.mu.Unlock()
 						return
 					}
-					s.mu.Lock()
 					s.erase()
 
 					if s.PreUpdate != nil {
@@ -303,9 +301,9 @@ func (s *Spinner) Start() {
 							outColor = fmt.Sprintf("\r%s%s%s ", s.Prefix, s.color(s.chars[i]), s.Suffix)
 						}
 					} else {
-						outColor = fmt.Sprintf("%s%s%s ", s.Prefix, s.color(s.chars[i]), s.Suffix)
+						outColor = fmt.Sprintf("\r%s%s%s ", s.Prefix, s.color(s.chars[i]), s.Suffix)
 					}
-					outPlain := fmt.Sprintf("%s%s%s ", s.Prefix, s.chars[i], s.Suffix)
+					outPlain := fmt.Sprintf("\r%s%s%s ", s.Prefix, s.chars[i], s.Suffix)
 					fmt.Fprint(s.Writer, outColor)
 					s.lastOutput = outPlain
 					delay := s.Delay
@@ -330,11 +328,11 @@ func (s *Spinner) Stop() {
 		s.active = false
 		if s.HideCursor && runtime.GOOS != "windows" {
 			// makes the cursor visible
-			fmt.Print("\033[?25h")
+			fmt.Fprint(s.Writer, "\033[?25h")
 		}
 		s.erase()
 		if s.FinalMSG != "" {
-			fmt.Fprintf(s.Writer, s.FinalMSG)
+			fmt.Fprint(s.Writer, s.FinalMSG)
 		}
 		s.stopChan <- struct{}{}
 	}
@@ -349,13 +347,14 @@ func (s *Spinner) Restart() {
 // Reverse will reverse the order of the slice assigned to the indicator.
 func (s *Spinner) Reverse() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	for i, j := 0, len(s.chars)-1; i < j; i, j = i+1, j-1 {
 		s.chars[i], s.chars[j] = s.chars[j], s.chars[i]
 	}
+	s.mu.Unlock()
 }
 
-// Color will set the struct field for the given color to be used.
+// Color will set the struct field for the given color to be used. The spinner
+// will need to be explicitly restarted.
 func (s *Spinner) Color(colors ...string) error {
 	colorAttributes := make([]color.Attribute, len(colors))
 
@@ -370,22 +369,21 @@ func (s *Spinner) Color(colors ...string) error {
 	s.mu.Lock()
 	s.color = color.New(colorAttributes...).SprintFunc()
 	s.mu.Unlock()
-	s.Restart()
 	return nil
 }
 
 // UpdateSpeed will set the indicator delay to the given value.
 func (s *Spinner) UpdateSpeed(d time.Duration) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.Delay = d
+	s.mu.Unlock()
 }
 
 // UpdateCharSet will change the current character set to the given one.
 func (s *Spinner) UpdateCharSet(cs []string) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.chars = cs
+	s.mu.Unlock()
 }
 
 // erase deletes written characters.
@@ -393,20 +391,10 @@ func (s *Spinner) UpdateCharSet(cs []string) {
 func (s *Spinner) erase() {
 	n := utf8.RuneCountInString(s.lastOutput)
 	if runtime.GOOS == "windows" {
-		clearString := "\r"
-		for i := 0; i < n; i++ {
-			clearString += " "
-		}
-		clearString += "\r"
-		fmt.Fprintf(s.Writer, clearString)
+		clearString := "\r" + strings.Repeat(" ", n) + "\r"
+		fmt.Fprint(s.Writer, clearString)
 		s.lastOutput = ""
 		return
-	}
-	del, _ := hex.DecodeString("7f")
-	for _, c := range []string{"\b", string(del)} {
-		for i := 0; i < n; i++ {
-			fmt.Fprintf(s.Writer, c)
-		}
 	}
 	fmt.Fprintf(s.Writer, "\r\033[K") // erases to end of line
 	s.lastOutput = ""
