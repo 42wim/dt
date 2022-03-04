@@ -17,7 +17,7 @@ Feedback, issues and PR's are welcome.
 Binaries can be found [here](https://github.com/42wim/dt/releases/)
 
 ## Building
-Go 1.13+ is required.
+Go 1.17+ is required.
 
 ```
 go install github.com/42wim/dt
