@@ -1,3 +1,5 @@
+// Copyright (c) 2021 Brian J. Downs
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
@@ -26,6 +28,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/fatih/color"
+	"github.com/mattn/go-isatty"
 )
 
 // errInvalidColor is returned when attempting to set an invalid color
@@ -95,6 +98,9 @@ var validColors = map[string]bool{
 	"bgHiCyan":    true,
 	"bgHiWhite":   true,
 }
+
+// returns true if the OS is windows and the WT_SESSION env variable is set.
+var isWindowsTerminalOnWindows = len(os.Getenv("WT_SESSION")) > 0 && runtime.GOOS == "windows"
 
 // returns a valid color's foreground text color attribute
 var colorAttributeMap = map[string]color.Attribute{
@@ -168,7 +174,7 @@ func validColor(c string) bool {
 
 // Spinner struct to hold the provided options.
 type Spinner struct {
-	mu         *sync.RWMutex                 //
+	mu         *sync.RWMutex
 	Delay      time.Duration                 // Delay is the speed of the indicator
 	chars      []string                      // chars holds the chosen character set
 	Prefix     string                        // Prefix is the text preppended to the indicator
@@ -187,18 +193,20 @@ type Spinner struct {
 // New provides a pointer to an instance of Spinner with the supplied options.
 func New(cs []string, d time.Duration, options ...Option) *Spinner {
 	s := &Spinner{
-		Delay:    d,
-		chars:    cs,
-		color:    color.New(color.FgWhite).SprintFunc(),
-		mu:       &sync.RWMutex{},
-		Writer:   color.Output,
-		active:   false,
-		stopChan: make(chan struct{}, 1),
+		Delay:      d,
+		chars:      cs,
+		color:      color.New(color.FgWhite).SprintFunc(),
+		mu:         &sync.RWMutex{},
+		Writer:     color.Output,
+		stopChan:   make(chan struct{}, 1),
+		active:     false,
+		HideCursor: true,
 	}
 
 	for _, option := range options {
 		option(s)
 	}
+
 	return s
 }
 
@@ -264,11 +272,11 @@ func (s *Spinner) Active() bool {
 // Start will start the indicator.
 func (s *Spinner) Start() {
 	s.mu.Lock()
-	if s.active {
+	if s.active || !isRunningInTerminal() {
 		s.mu.Unlock()
 		return
 	}
-	if s.HideCursor && runtime.GOOS != "windows" {
+	if s.HideCursor && !isWindowsTerminalOnWindows {
 		// hides the cursor
 		fmt.Fprint(s.Writer, "\033[?25l")
 	}
@@ -287,7 +295,9 @@ func (s *Spinner) Start() {
 						s.mu.Unlock()
 						return
 					}
-					s.erase()
+					if !isWindowsTerminalOnWindows {
+						s.erase()
+					}
 
 					if s.PreUpdate != nil {
 						s.PreUpdate(s)
@@ -296,14 +306,14 @@ func (s *Spinner) Start() {
 					var outColor string
 					if runtime.GOOS == "windows" {
 						if s.Writer == os.Stderr {
-							outColor = fmt.Sprintf("\r%s%s%s ", s.Prefix, s.chars[i], s.Suffix)
+							outColor = fmt.Sprintf("\r%s%s%s", s.Prefix, s.chars[i], s.Suffix)
 						} else {
-							outColor = fmt.Sprintf("\r%s%s%s ", s.Prefix, s.color(s.chars[i]), s.Suffix)
+							outColor = fmt.Sprintf("\r%s%s%s", s.Prefix, s.color(s.chars[i]), s.Suffix)
 						}
 					} else {
-						outColor = fmt.Sprintf("\r%s%s%s ", s.Prefix, s.color(s.chars[i]), s.Suffix)
+						outColor = fmt.Sprintf("\r%s%s%s", s.Prefix, s.color(s.chars[i]), s.Suffix)
 					}
-					outPlain := fmt.Sprintf("\r%s%s%s ", s.Prefix, s.chars[i], s.Suffix)
+					outPlain := fmt.Sprintf("\r%s%s%s", s.Prefix, s.chars[i], s.Suffix)
 					fmt.Fprint(s.Writer, outColor)
 					s.lastOutput = outPlain
 					delay := s.Delay
@@ -326,13 +336,17 @@ func (s *Spinner) Stop() {
 	defer s.mu.Unlock()
 	if s.active {
 		s.active = false
-		if s.HideCursor && runtime.GOOS != "windows" {
+		if s.HideCursor && !isWindowsTerminalOnWindows {
 			// makes the cursor visible
 			fmt.Fprint(s.Writer, "\033[?25h")
 		}
 		s.erase()
 		if s.FinalMSG != "" {
-			fmt.Fprint(s.Writer, s.FinalMSG)
+			if isWindowsTerminalOnWindows {
+				fmt.Fprint(s.Writer, "\r", s.FinalMSG)
+			} else {
+				fmt.Fprint(s.Writer, s.FinalMSG)
+			}
 		}
 		s.stopChan <- struct{}{}
 	}
@@ -386,17 +400,24 @@ func (s *Spinner) UpdateCharSet(cs []string) {
 	s.mu.Unlock()
 }
 
-// erase deletes written characters.
+// erase deletes written characters on the current line.
 // Caller must already hold s.lock.
 func (s *Spinner) erase() {
 	n := utf8.RuneCountInString(s.lastOutput)
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == "windows" && !isWindowsTerminalOnWindows {
 		clearString := "\r" + strings.Repeat(" ", n) + "\r"
 		fmt.Fprint(s.Writer, clearString)
 		s.lastOutput = ""
 		return
 	}
-	fmt.Fprintf(s.Writer, "\r\033[K") // erases to end of line
+
+	// Taken from https://en.wikipedia.org/wiki/ANSI_escape_code:
+	// \r     - Carriage return - Moves the cursor to column zero
+	// \033[K - Erases part of the line. If n is 0 (or missing), clear from
+	// cursor to the end of the line. If n is 1, clear from cursor to beginning
+	// of the line. If n is 2, clear entire line. Cursor position does not
+	// change.
+	fmt.Fprintf(s.Writer, "\r\033[K")
 	s.lastOutput = ""
 }
 
@@ -418,4 +439,9 @@ func GenerateNumberSequence(length int) []string {
 		numSeq[i] = strconv.Itoa(i)
 	}
 	return numSeq
+}
+
+// isRunningInTerminal check if stdout file descriptor is terminal
+func isRunningInTerminal() bool {
+	return isatty.IsTerminal(os.Stdout.Fd())
 }
