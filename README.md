@@ -20,7 +20,7 @@ Binaries can be found [here](https://github.com/42wim/dt/releases/)
 Go 1.17+ is required.
 
 ```
-go install github.com/42wim/dt@latest
+go install github.com/42wim/dt@master
 ```
 
 You should now have dt binary in the bin directory:
