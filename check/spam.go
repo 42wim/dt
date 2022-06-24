@@ -20,6 +20,7 @@ type SpamData struct {
 	IP    string
 	Dmarc []dns.RR
 	Spf   []dns.RR
+	BIMI  []dns.RR
 	Error string
 }
 
@@ -35,6 +36,7 @@ func NewSpam(s *scan.Scan, ns []structs.NSData) *SpamCheck {
 func (c *SpamCheck) Scan(domain string) {
 	c.ScanDmarc(domain)
 	c.ScanSpf(domain)
+	c.ScanBIMI(domain)
 }
 
 func (c *SpamCheck) ScanDmarc(domain string) {
@@ -48,6 +50,23 @@ func (c *SpamCheck) ScanDmarc(domain string) {
 			dmarc, _, err := scan.QueryRRset("_dmarc."+domain, dns.TypeTXT, nsip.String(), true)
 			if !c.Report.scanError("DMARC scan", ns.Name, nsip.String(), domain, dmarc, err) {
 				data.Dmarc = dmarc
+				c.Spam = append(c.Spam, data)
+			}
+		}
+	}
+}
+
+func (c *SpamCheck) ScanBIMI(domain string) {
+	log.Debugf("Spam: scanbimi")
+	defer log.Debugf("Spam: scanbimi exit")
+
+	for _, ns := range c.NS {
+		for _, nsip := range ns.IP {
+			data := SpamData{Name: ns.Name, IP: nsip.String()}
+
+			bimi, _, err := scan.QueryRRset("default._bimi."+domain, dns.TypeTXT, nsip.String(), true)
+			if !c.Report.scanError("BIMI scan", ns.Name, nsip.String(), domain, bimi, err) {
+				data.BIMI = bimi
 				c.Spam = append(c.Spam, data)
 			}
 		}
@@ -180,6 +199,26 @@ func (c *SpamCheck) Values() []ReportResult {
 				Status: true, Name: "SPF",
 			})
 		}
+	}
+
+	rrset = nil
+	for _, ns := range c.Spam {
+		if ns.BIMI != nil {
+			rrset = ns.BIMI
+			break
+		}
+	}
+
+	if len(rrset) > 0 {
+		records := []string{}
+		for _, rr := range rrset {
+			records = append(records, rr.String())
+		}
+
+		results = append(results, ReportResult{
+			Result: "INFO: BIMI records found.",
+			Status: true, Records: records, Name: "BIMI",
+		})
 	}
 
 	// TODO
